@@ -1,0 +1,82 @@
+/* Step 3.5 - Configure button and LED for Serial Recovery */
+/ {
+    aliases {
+          mcuboot-button0 = &button1;
+          mcuboot-led0 = &led1;
+    };
+  };
+
+  &zephyr_udc0 {
+    cdc_acm_uart0: cdc_acm_uart0 {
+      compatible = "zephyr,cdc-acm-uart";
+    };
+  };
+  
+
+  //the application overlay isn't applied to the serial recovery  so we need to specify button and led location.
+  &button1{
+      gpios = <&gpio1 13 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+  };
+
+
+
+  &led1{
+      gpios = <&gpio1 7 (GPIO_ACTIVE_HIGH)>;
+      label = "Green LED";
+  };
+
+&gpio1 {
+    en3v3 {
+        gpio-hog;
+        gpios = <0 GPIO_ACTIVE_HIGH>;
+        output-high;
+    };
+};
+
+///delete-node/ &gpio_fwd;
+  
+
+&uart3{
+	status = "disabled";
+};
+
+&uart0{
+	status = "disabled";
+};
+
+&i2c1{
+	status = "disabled";
+};
+
+&i2c2{
+	status = "disabled";
+}; 
+
+&spi1{
+	status = "disabled";
+};
+
+&spi4{
+	status = "disabled";
+};
+
+&qspi{
+	status = "disabled";
+};
+
+&nfct{
+	status = "disabled";
+};
+
+&adc{
+	status = "disabled";
+};
+
+&pwm0{
+	status = "disabled";
+};
+
+&pwm1{
+	status = "disabled";
+};
+

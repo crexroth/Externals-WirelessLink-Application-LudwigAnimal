@@ -1,0 +1,9 @@
+board:
+  name: cosmiic_wireless_link
+  full_name: COSMIIC Wireless Link
+  vendor: nordic
+  socs:
+    - name: nrf5340
+      variants:
+        - name: ns
+          cpucluster: cpuapp

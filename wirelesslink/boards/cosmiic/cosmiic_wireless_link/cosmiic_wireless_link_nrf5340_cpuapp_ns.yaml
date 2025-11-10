@@ -1,0 +1,19 @@
+identifier: cosmiic_wireless_link/nrf5340/cpuapp/ns
+name: cosmiicwirelesslink-NRF5340-application-MCU-Non-Secure
+type: mcu
+arch: arm
+toolchain:
+  - gnuarmemb
+  - xtools
+  - zephyr
+ram: 192
+flash: 192
+supported:
+  - gpio
+  - i2c
+  - pwm
+  - watchdog
+  - usbd
+  - usb_device
+  - netif:openthread
+vendor: nordic
