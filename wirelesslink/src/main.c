@@ -126,9 +126,6 @@ LOG_MODULE_REGISTER(app);
 
 static K_SEM_DEFINE(ble_init_ok, 0, 1);
 
-static struct bt_conn *current_conn;
-static struct bt_conn *auth_conn;
-
 static const struct device *uart = DEVICE_DT_GET(DT_CHOSEN(nordic_nus_uart));
 
 
@@ -156,91 +153,9 @@ UART_ASYNC_ADAPTER_INST_DEFINE(async_adapter);
 uint8_t rx_buf[RX_BUF_SIZE] = {0};
 uint8_t tx_buf[TX_BUF_SIZE] = {0};
 
-
-//See BT Fundamentals Lesson 5, Ex 2
-#define BT_LE_ADV_CONN_NO_ACCEPT_LIST  BT_LE_ADV_PARAM(BT_LE_ADV_OPT_CONNECTABLE|BT_LE_ADV_OPT_ONE_TIME, \
-	BT_GAP_ADV_FAST_INT_MIN_2, \
-	BT_GAP_ADV_FAST_INT_MAX_2, NULL)
-
-#define BT_LE_ADV_CONN_ACCEPT_LIST BT_LE_ADV_PARAM(BT_LE_ADV_OPT_CONNECTABLE|BT_LE_ADV_OPT_FILTER_CONN|BT_LE_ADV_OPT_ONE_TIME, \
-	BT_GAP_ADV_FAST_INT_MIN_2, \
-	BT_GAP_ADV_FAST_INT_MAX_2, NULL)
-
-static void setup_accept_list_cb(const struct bt_bond_info *info, void *user_data)
-{
-	int *bond_cnt = user_data;
-	if ((*bond_cnt) < 0) {
-		return;
-	}
-	int err = bt_le_filter_accept_list_add(&info->addr);
-	LOG_INF("Added following peer to whitelist: %x %x \n",info->addr.a.val[0],info->addr.a.val[1]);
-	if (err) {
-		LOG_INF("Cannot add peer to Filter Accept List (err: %d)\n", err);
-		(*bond_cnt) = -EIO;
-	} else {
-		(*bond_cnt)++;
-	}
-}
-
-static int setup_accept_list(uint8_t local_id)
-{
-	int err = bt_le_filter_accept_list_clear();
-	if (err) {
-		LOG_INF("Cannot clear Filter Accept List (err: %d)\n", err);
-		return err;
-	}
-	int bond_cnt = 0;
-	bt_foreach_bond(local_id, setup_accept_list_cb, &bond_cnt);
-	return bond_cnt;
-}
-
-void advertise_with_acceptlist(struct k_work *work)
-{
-	int err=0;
-	int allowed_cnt= setup_accept_list(BT_ID_DEFAULT);
-	if (allowed_cnt<0){
-		LOG_INF("Acceptlist setup failed (err:%d)\n", allowed_cnt);
-	} else {
-		if (allowed_cnt==0){
-			LOG_INF("Advertising with no Filter Accept list\n"); 
-			err = bt_le_adv_start(BT_LE_ADV_CONN_NO_ACCEPT_LIST, ad, ARRAY_SIZE(ad),
-					sd, ARRAY_SIZE(sd));
-		}
-		else {
-			LOG_INF("Acceptlist setup number  = %d \n",allowed_cnt);
-			err = bt_le_adv_start(BT_LE_ADV_CONN_ACCEPT_LIST, ad, ARRAY_SIZE(ad),
-				sd, ARRAY_SIZE(sd));	
-		}
-		if (err) {
-		 	LOG_INF("Advertising failed to start (err %d)\n", err);
-			return;
-		}
-		LOG_INF("Advertising successfully started\n");
-	}
-}
-K_WORK_DEFINE(advertise_acceptlist_work, advertise_with_acceptlist);
-
-uint8_t start_pairing_mode(void)
-{
-	int err_code = bt_le_adv_stop();
-	if (err_code) {
-		LOG_INF("Cannot stop advertising err= %d \n", err_code);
-		return;
-	}
-	err_code = bt_le_filter_accept_list_clear();
-	if (err_code) {
-		LOG_INF("Cannot clear accept list (err: %d)\n", err_code);
-	} else	{
-		LOG_INF("Filter Accept List cleared succesfully");
-	}				
-	err_code = bt_le_adv_start(BT_LE_ADV_CONN_NO_ACCEPT_LIST, ad, ARRAY_SIZE(ad),	sd, ARRAY_SIZE(sd));
-	if (err_code) {
-		LOG_INF("Cannot start open advertising (err: %d)\n", err_code);
-	} else	{
-		LOG_INF("Advertising in pairing mode started");
-	}	
-	return err_code;
-}
+static bool pairing_mode = false;
+static bool isAdvertising = false;
+static bool isReady = false;
 
 //See BT Fundamentals Lesson 5, Ex 1
 uint8_t erasebonds(void)
@@ -255,18 +170,106 @@ uint8_t erasebonds(void)
 	return err;
 }
 
+//See BT Fundamentals Lesson 5, Ex 2
+#define BT_LE_ADV_CONN_ACCEPT_LIST \
+	BT_LE_ADV_PARAM(BT_LE_ADV_OPT_CONN | BT_LE_ADV_OPT_FILTER_CONN,                \
+			BT_GAP_ADV_FAST_INT_MIN_2, BT_GAP_ADV_FAST_INT_MAX_2, NULL)
+
+static void setup_accept_list_cb(const struct bt_bond_info *info, void *user_data)
+{
+	int *bond_cnt = user_data;
+
+	if ((*bond_cnt) < 0) {
+		return;
+	}
+
+	int err = bt_le_filter_accept_list_add(&info->addr);
+	LOG_INF("Added following peer to accept list: %x %x\n", info->addr.a.val[0],
+		info->addr.a.val[1]);
+	if (err) {
+		LOG_INF("Cannot add peer to filter accept list (err: %d)\n", err);
+		(*bond_cnt) = -EIO;
+	} else {
+		(*bond_cnt)++;
+	}
+}
+
+/*  Define the function to loop through the bond list */
+static int setup_accept_list(uint8_t local_id)
+{
+	int err = bt_le_filter_accept_list_clear();
+
+	if (err) {
+		LOG_INF("Cannot clear accept list (err: %d)\n", err);
+		return err;
+	}
+
+	int bond_cnt = 0;
+
+	bt_foreach_bond(local_id, setup_accept_list_cb, &bond_cnt);
+
+	return bond_cnt;
+}
+
+static void start_adv_work_handler(struct k_work *work)
+{
+	int err = 0;
+	/* Advertise without using Accept List when pairing_mode is set to true */
+	if (pairing_mode==true) {
+		err = bt_le_filter_accept_list_clear();
+		if (err) {
+			LOG_INF("Cannot clear accept list (err: %d)\n", err);
+		} else {
+			LOG_INF("Accept list cleared succesfully");
+		}
+		
+		err = bt_le_adv_start(BT_LE_ADV_CONN_FAST_2, ad, ARRAY_SIZE(ad), sd,
+				      ARRAY_SIZE(sd));
+		if (err) {
+			LOG_INF("Advertising failed to start (err %d)\n", err);
+			return;
+		}
+		LOG_INF("Advertising successfully started\n");
+		return;
+	}
+
+	/* Start advertising with the Accept List */
+	int allowed_cnt = setup_accept_list(BT_ID_DEFAULT);
+	if (allowed_cnt < 0) {
+		LOG_INF("Acceptlist setup failed (err:%d)\n", allowed_cnt);
+	} else {
+		if (allowed_cnt == 0) {
+			LOG_INF("Advertising with no Accept list \n");
+			pairing_mode=true;
+			err = bt_le_adv_start(BT_LE_ADV_CONN_FAST_2, ad, ARRAY_SIZE(ad), sd,
+					      ARRAY_SIZE(sd));
+		} else {
+			LOG_INF("Advertising with Accept list \n");
+			LOG_INF("Acceptlist setup number  = %d \n", allowed_cnt);
+			err = bt_le_adv_start(BT_LE_ADV_CONN_ACCEPT_LIST, ad, ARRAY_SIZE(ad), sd,
+					      ARRAY_SIZE(sd));
+		}
+		if (err) {
+			LOG_INF("Advertising failed to start (err %d)\n", err);
+			return;
+		}
+		LOG_INF("Advertising successfully started\n");
+	}
+
+}
+K_WORK_DEFINE(start_adv_work, start_adv_work_handler); //this replaces static struct definition and init
 
 
-void stop_adv_work_handler(struct k_work *work)
+static void stop_adv_work_handler(struct k_work *work)
 {
     ble_stop_advertising();
 }
 K_WORK_DEFINE(stop_adv_work, stop_adv_work_handler);
 
 
-bool isAdvertising = false;
+
 #define ADV_TIMEOUT 60
-void adv_timeout_action(struct k_timer *dummy)
+static void adv_timeout_action(struct k_timer *dummy)
 {
     LOG_INF("Advertising Timeout");
 	//We can't call ble_stop_advertising directly because this is called by an ISR
@@ -274,6 +277,14 @@ void adv_timeout_action(struct k_timer *dummy)
 }
 
 K_TIMER_DEFINE(adv_timer, adv_timeout_action, NULL);
+
+
+
+
+
+
+
+
 
 
 void btn1_longpress_action(struct k_timer *dummy)
@@ -624,8 +635,6 @@ static bool uart_test_async_api(const struct device *dev)
 static int uart_init(void)
 {
 	int err;
-	//struct uart_data_t *rx;
-	//struct uart_data_t *tx;
 
 	if (!device_is_ready(uart)) {
 		return -ENODEV;
@@ -687,7 +696,7 @@ static int uart_init(void)
 	return err;
 }
 
-static void connected(struct bt_conn *conn, uint8_t err)
+static void on_connected(struct bt_conn *conn, uint8_t err)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
 
@@ -696,22 +705,23 @@ static void connected(struct bt_conn *conn, uint8_t err)
 		return;
 	}
 
-	//JML Note: the example does not stop advertising 
+	//stop advertising since we are only supporting 1 connection
 	ble_stop_advertising();
-	//alternatively we could stop the timer
-	// k_timer_stop(&adv_timer);
-	// isAdvertising = false;
 
 	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
-	LOG_INF("Connected %s", addr);
+	
 
-	current_conn = bt_conn_ref(conn);
+	#ifdef CONFIG_BT_NUS_SECURITY_ENABLED
+		LOG_INF("Connected %s, (Security required for NUS.  Pair if not already bonded)", addr);	
+		//isReady will occur once level 4 security is reached
+	#else
+		LOG_INF("Connected (Seurity Disabled on NUS!) %s", addr);	
+		isReady = true;
+	#endif
 
-
-	//dk_set_led_on(CON_STATUS_LED);
 }
 
-static void disconnected(struct bt_conn *conn, uint8_t reason)
+static void on_disconnected(struct bt_conn *conn, uint8_t reason)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
 
@@ -719,29 +729,13 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 
 	LOG_INF("Disconnected: %s (reason %u)", addr, reason);
 
-	if (auth_conn) {
-		bt_conn_unref(auth_conn);
-		auth_conn = NULL;
-	}
-
-	if (current_conn) {
-		bt_conn_unref(current_conn);
-		current_conn = NULL;
-		//k_set_led_off(CON_STATUS_LED);
-	}
-	
-	
-	//JML Note: the example does not restart advertising, but bt_conn_unref will result in resuming advertising if it was not 
-	//previously stopped 
+	isReady = false;
 	ble_start_advertising();
-	//this will resume advertising (differnet from start advertising) without a timeout so start the advertising timeout again.
-	// k_timer_start(&adv_timer, K_SECONDS(ADV_TIMEOUT), K_NO_WAIT);
-	// isAdvertising = true;
-	
+
 }
 
 #ifdef CONFIG_BT_NUS_SECURITY_ENABLED
-static void security_changed(struct bt_conn *conn, bt_security_t level,
+static void on_security_changed(struct bt_conn *conn, bt_security_t level,
 			     enum bt_security_err err)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
@@ -754,18 +748,26 @@ static void security_changed(struct bt_conn *conn, bt_security_t level,
 		LOG_WRN("Security failed: %s level %u err %d", addr,
 			level, err);
 	}
+	if(level >= 4)
+	{
+		isReady = true;
+	}
+	else 
+	 {
+		isReady = false;
+	 }
 }
 #endif
 
 BT_CONN_CB_DEFINE(conn_callbacks) = {
-	.connected    = connected,
-	.disconnected = disconnected,
+	.connected    = on_connected,
+	.disconnected = on_disconnected,
 #ifdef CONFIG_BT_NUS_SECURITY_ENABLED
-	.security_changed = security_changed,
+	.security_changed = on_security_changed,
 #endif
 };
 
-#if defined(CONFIG_BT_NUS_SECURITY_ENABLED)
+#ifdef CONFIG_BT_NUS_SECURITY_ENABLED
 static uint32_t pairing_passkey = 0;
 
 uint32_t getpasskey(void)
@@ -780,20 +782,8 @@ static void auth_passkey_display(struct bt_conn *conn, unsigned int passkey)
 
 	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 
-	LOG_INF("Passkey for %s: %06u", addr, passkey);
+	LOG_INF("Display Passkey %s: %06u", addr, passkey);
 	pairing_passkey = passkey;
-}
-
-static void auth_passkey_confirm(struct bt_conn *conn, unsigned int passkey)
-{
-	char addr[BT_ADDR_LE_STR_LEN];
-
-	auth_conn = bt_conn_ref(conn);
-
-	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
-
-	LOG_INF("Passkey for %s: %06u", addr, passkey);
-	LOG_INF("Press Button 1 to confirm, Button 2 to reject.");
 }
 
 
@@ -833,7 +823,6 @@ static void pairing_failed(struct bt_conn *conn, enum bt_security_err reason)
 
 static struct bt_conn_auth_cb conn_auth_callbacks = {
 	.passkey_display = auth_passkey_display,
-	//.passkey_confirm = auth_passkey_confirm, //no button confirm
 	.cancel = auth_cancel,
 };
 
@@ -882,23 +871,6 @@ void error(void)
 	}
 }
 
-//JML: this isn't used because we don't use the buttons to confirm authorization>>
-#ifdef CONFIG_BT_NUS_SECURITY_ENABLED
-static void num_comp_reply(bool accept)
-{
-	if (accept) {
-		bt_conn_auth_passkey_confirm(auth_conn);
-		LOG_INF("Numeric Match, conn %p", (void *)auth_conn);
-	} else {
-		bt_conn_auth_cancel(auth_conn);
-		LOG_INF("Numeric Reject, conn %p", (void *)auth_conn);
-	}
-
-	bt_conn_unref(auth_conn);
-	auth_conn = NULL;
-}
-#endif /* CONFIG_BT_NUS_SECURITY_ENABLED */
-//<<
 
 #if WL_IN_CHARGER
 	K_THREAD_DEFINE(charger_thread_id, CHARGER_STACKSIZE, charger_thread, NULL, NULL, NULL, CHARGER_PRIORITY, 0, 0);
@@ -970,19 +942,19 @@ void button_changed(uint32_t button_state, uint32_t has_changed)
 
 	//JML: This allows a button press to authorize the pairing request. Currently not used
 	//instead the passkey is read via USB
-	#ifdef CONFIG_BT_NUS_SECURITY_ENABLED
-	if (auth_conn) {
-		if (buttonsOn & KEY_PASSKEY_ACCEPT) {
-			LOG_INF("Passkey accepted");
-			num_comp_reply(true);
-		}
+	// #ifdef CONFIG_BT_NUS_SECURITY_ENABLED
+	// if (auth_conn) {
+	// 	if (buttonsOn & KEY_PASSKEY_ACCEPT) {
+	// 		LOG_INF("Passkey accepted");
+	// 		num_comp_reply(true);
+	// 	}
 
-		if (buttonsOn & KEY_PASSKEY_REJECT) {
-			LOG_INF("Passkey rejected");
-			num_comp_reply(false);
-		}
-	}
-	#endif /* CONFIG_BT_NUS_SECURITY_ENABLED */
+	// 	if (buttonsOn & KEY_PASSKEY_REJECT) {
+	// 		LOG_INF("Passkey rejected");
+	// 		num_comp_reply(false);
+	// 	}
+	// }
+	// #endif /* CONFIG_BT_NUS_SECURITY_ENABLED */
 
 	if (buttonsOn & DK_BTN1_MSK ){
 		k_timer_start(&btn1_timer, K_MSEC(2000), K_NO_WAIT);
@@ -1165,21 +1137,25 @@ int saved_settings_read(uint16_t id, const void* buf, size_t len)
 }
 
 
+void ble_start_advertising_pairing_mode(void)
+{
+	//stop any ongoing advertising first
+	ble_stop_advertising();
+	
+	LOG_INF("BLE-Start Advertising in Pairing Mode");
+	pairing_mode = true;
+	k_work_submit(&start_adv_work);
 
-
-
+	isAdvertising = true;
+	k_timer_start(&adv_timer, K_SECONDS(ADV_TIMEOUT), K_NO_WAIT);
+}
 
 
 void ble_start_advertising(void){
+	
+	pairing_mode = false;
 	LOG_INF("BLE-Start Advertising");
-
-	// int err = bt_le_adv_start(BT_LE_ADV_CONN, ad, ARRAY_SIZE(ad), sd,
-	// 		      ARRAY_SIZE(sd));
-	// if (err) {
-	// 	LOG_ERR("Advertising failed to start (err %d)", err);
-	// 	return;
-	// }
-	k_work_submit(&advertise_acceptlist_work);
+	k_work_submit(&start_adv_work);
 
 	isAdvertising = true;
 	k_timer_start(&adv_timer, K_SECONDS(ADV_TIMEOUT), K_NO_WAIT);
@@ -1200,7 +1176,7 @@ void ble_stop_advertising(void){
 
 
 
-void main(void)
+int main(void)
 {
 	int err = 0;
 
@@ -1223,12 +1199,12 @@ void main(void)
 			LOG_WRN("Failed to register authorization callbacks.\n");
 			return;
 		}
-		//JML: this informs the app of the pin
-		// err = bt_conn_auth_info_cb_register(&conn_auth_info_callbacks);
-		// if (err) {
-		// 	LOG_WRN("Failed to register authorization info callbacks.\n");
-		// 	return;
-		// }
+		
+		err = bt_conn_auth_info_cb_register(&conn_auth_info_callbacks);
+		if (err) {
+			LOG_WRN("Failed to register authorization info callbacks.\n");
+			return;
+		}
 		LOG_INF("Bluetooth Authorization Callbacks registered");
 	}
 
@@ -1318,11 +1294,13 @@ void main(void)
 	//Just blink LED infinitely, everything else happens in separate threads
 	//uint8_t cnt = 0;
 	for (;;) {
-		if(modeLED & BLUE_LED_BLE_ADV && (isAdvertising ||  current_conn != NULL)) {dk_set_led_on(BLUE_LED);}
+		if(modeLED & BLUE_LED_BLE_ADV && (isAdvertising ||  isReady )) {dk_set_led_on(BLUE_LED);}
 		k_sleep(K_MSEC(100));
-		if(current_conn == NULL){
+		if(!isReady ){
 			if(modeLED & BLUE_LED_BLE_ADV){dk_set_led_off(BLUE_LED);}
-			k_sleep(K_MSEC(900));
+			
+			if(isAdvertising && pairing_mode){k_sleep(K_MSEC(100));}  //fast blink in pairing mode
+			else {k_sleep(K_MSEC(900));}  //slow blink otherwise
 		} 
 	}
 }

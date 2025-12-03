@@ -413,7 +413,7 @@ void coil_reqresp_thread(void)
 	}
 }
 
-void startWatchdog()
+bool startWatchdog()
 {
 	struct wdt_timeout_cfg wdt_config = {
 		/* Reset SoC when watchdog timer expires. */
@@ -421,19 +421,22 @@ void startWatchdog()
 
 		/* Expire watchdog after max window */
 		.window.min = 0,
-		.window.max = 10000, 
+		.window.max = 60000, //one minute
 	};
 	wdt_channel_id = wdt_install_timeout(wdt, &wdt_config);
 	if (wdt_channel_id < 0) {
 		LOG_ERR("Watchdog install error\n");
-		return;
+		return false;
 	}
 
 	int err = wdt_setup(wdt, 0);
 	if (err < 0) {
 		LOG_ERR("Watchdog setup error %d\n", err);
-		return;
+		return false;
 	}
+
+	LOG_INF("Watchdog Started!");
+	return true;
 
 }
 
@@ -445,6 +448,10 @@ void disableWatchdog()
 	{
 		LOG_ERR("Watchdog disable error: %d\n", err);
 	}
+	else
+	{
+		LOG_INF("Watchdog Stopped!");
+	}
 }
 
 void feedWatchdog()
@@ -455,8 +462,16 @@ void feedWatchdog()
 	{
 		LOG_ERR("Watchdog feed error: %d\n", err);
 	}
+	else
+	{
+		LOG_INF("Watchdog Fed - must feed again within 60s!");
+	}
 }
 
+void keepCoilOn()
+{
+	feedWatchdog();
+}
 
 
 uint16_t getThermistor(void)
@@ -580,19 +595,28 @@ uint8_t getCDPower(int16_t* current, uint16_t* voltage)
 
 void startCoilDrive(void)
 {
-	if (coil_period == 0)
+	if(startWatchdog())
 	{
-		coil_period = DEFAULT_COIL_PERIOD;
-	}
+		if (coil_period == 0)
+		{
+			coil_period = DEFAULT_COIL_PERIOD;
+		}
 
-	setCoilPeriod(coil_period); //start PWM
-	enableCoilDrive(1);
+		setCoilPeriod(coil_period); //start PWM
+		enableCoilDrive(1);
+		LOG_INF("Started COil Drive.  Watchdog must be fed to prevent reset");
+	}
+	else
+	{
+		LOG_INF("Could not start watchdog. Starting Coil Drive not allowed");
+	}
 }
 
 void stopCoilDrive(void)
 {
 	enableCoilDrive(0);
 	setCoilPeriod(0);  //stop PWM
+	disableWatchdog(); 
 }
 
 //Fullscale range options for TPS55289 DCDC converter
@@ -1391,6 +1415,7 @@ static int lsdir(const char *path)
 	return res;
 }
 
+//JML Note: if this is set to leave coil on for longer than watchdog reset time, Charger will reset since it does not feed the watchdog
 void tuneCoil(void)
 {
 	uint16_t voltageSetting = 5000; //5V
@@ -1479,7 +1504,7 @@ void tuneCoil(void)
 }
 
 
-
+//JML Note: if this is set to leave coil on for longer than watchdog reset time, Charger will reset since it does not feed the watchdog
 #define METAL_DETECT_TIME 30 //in s
 #define DATA_INDEX 8
 
@@ -2454,6 +2479,9 @@ void charge(void)
 			}
 			playsound = PLAYSOUND_NONE;
 		}
+		
+		feedWatchdog();
+
 	} //end WHILE loop
 
 

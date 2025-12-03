@@ -6,7 +6,7 @@
 #include <stdbool.h>
 #include <string.h>
 
-#define WL_IN_CHARGER true
+#define WL_IN_CHARGER false
 #define HW_REV 1 //up to 65535
 #define SW_REV 8 //up to 65535
 
@@ -139,7 +139,7 @@ void setLEDs( uint8_t red, uint8_t green, uint8_t blue);
 //void enable_sensor(uint8_t enable);
 
 uint8_t erasebonds(void);
-uint8_t start_pairing_mode(void);
+void ble_start_advertising_pairing_mode(void);
 uint32_t getpasskey(void);
 
 #endif

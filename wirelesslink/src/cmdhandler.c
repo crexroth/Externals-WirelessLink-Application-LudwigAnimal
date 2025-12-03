@@ -28,7 +28,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #define WL_ENTER_DFU_MODE           (0x21) //  Not yet implemented.  Hold button1 during reset to enter serial recovery
 #define WL_ERASE_BONDS              (0x22) //    0         1         returns erasebonds result
 #define WL_RESET                    (0x23) //    0         0            Reset WL
-#define WL_START_PAIRING            (0x1F)
+#define WL_START_PAIRING            (0x1F) //    0         0           Start advertising, allowing new devices
 #define WL_GET_PASSKEY              (0x1E)
 //These commands allow accelerating long flash read/write commands with PM
 //WL Image is currently only 512 bytes 
@@ -90,7 +90,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #define CD_START_DCDC               (0x62) //   0         0           Start DCDC converter (supplies Coil Drive)    
 #define CD_STOP_DCDC                (0x63) //   0         0           Stop DCDC converter (supplies Coil Drive)          
 #define CD_SET_DCDC_VOLT            (0x64) //   2         0           Set DCDC voltage: 2 bytes (uint16, mV)  
-
+#define CD_KEEP_COIL_ON             (0x65) //   0         0           Feeds the watchdog timer to keep the coil on.  Ohterwise reset will occur 1 min after turning coil on  
 #define DISPLAY_SET                 (0x6D) //    1+4+N                clear screen, len1, [str1 ...], len2, [str2 ...], len3, [str3 ...], len4, [str4 ...]
 
 #define CD_GET_RTC                  (0x70) //   0         7           sec, min, hour, weekday, day, month, year
@@ -229,9 +229,9 @@ void command_handler_thread(void)
             case WL_START_PAIRING:
                 if(cmd_payload_len == 0)
                 {
-                    response[INDEX_RESP_PAYLOAD] = start_pairing_mode();
+                    ble_start_advertising_pairing_mode();
                     response_type = RESP_SUCCESS;
-                    response_len = NON_PAYLOAD_RESP_BYTES + 1;
+                    response_len = NON_PAYLOAD_RESP_BYTES;
                 }
                 else
                 {
@@ -934,6 +934,21 @@ void command_handler_thread(void)
                     response_type = RESP_INVALID_PARAMETERS;
                 }   
                 break; 
+
+            case CD_KEEP_COIL_ON:
+                if(cmd_payload_len == 0)  
+                {
+                    
+                    response_len = NON_PAYLOAD_RESP_BYTES;
+                    response_type = RESP_SUCCESS;
+                    keepCoilOn();
+                }
+                else
+                {
+                    response_len = NON_PAYLOAD_RESP_BYTES;
+                    response_type = RESP_INVALID_PARAMETERS;
+                }   
+                break;
 
             case DISPLAY_SET:
                 if(cmd_payload_len < 2) 

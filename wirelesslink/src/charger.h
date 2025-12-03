@@ -44,6 +44,7 @@ void writeRTC(uint8_t* rtc);
 void startDCDC();
 void stopDCDC();
 void setDCDC(uint16_t voltage);
+void keepCoilOn();
 uint32_t setCoilPeriod(uint32_t period);
 uint32_t getCoilPeriod(void);
 uint16_t getThermistor(void);
