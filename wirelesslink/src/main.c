@@ -37,7 +37,7 @@
 
 
 
-#include <zephyr/drivers/sensor.h>
+//#include <zephyr/drivers/sensor.h>
 
 
 #include <zephyr/drivers/flash.h>
@@ -64,6 +64,9 @@
 #include "charger.h"
 #include "wlgpio.h"
 #include "spi.h"
+#include "imu.h"
+
+
 
 
 
@@ -128,10 +131,13 @@ static K_SEM_DEFINE(ble_init_ok, 0, 1);
 
 static const struct device *uart = DEVICE_DT_GET(DT_CHOSEN(nordic_nus_uart));
 
+//If using Dynamic name
+// static struct bt_data ad[] = {
+// 	BT_DATA_BYTES(BT_DATA_FLAGS, ( BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
+// };
 
-
-static const struct bt_data ad[] = {
-	BT_DATA_BYTES(BT_DATA_FLAGS, (/*BT_LE_AD_LIMITED |*/ BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
+static struct bt_data ad[] = {
+	BT_DATA_BYTES(BT_DATA_FLAGS, ( BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
 	BT_DATA(BT_DATA_NAME_COMPLETE, DEVICE_NAME, DEVICE_NAME_LEN),
 };
 
@@ -156,6 +162,7 @@ uint8_t tx_buf[TX_BUF_SIZE] = {0};
 static bool pairing_mode = false;
 static bool isAdvertising = false;
 static bool isReady = false;
+static uint8_t bond_addr_list[CONFIG_BT_MAX_PAIRED][BT_ADDR_SIZE] = {0};
 
 //See BT Fundamentals Lesson 5, Ex 1
 uint8_t erasebonds(void)
@@ -170,13 +177,21 @@ uint8_t erasebonds(void)
 	return err;
 }
 
-//See BT Fundamentals Lesson 5, Ex 2
+//To use a device name changed at runtime (e.g. to include serial number in advertising name)
+//JML: can't figure out how to include the Complete name instead of shortened name
+//#define BT_LE_ADV_CONN_ACCEPT_LIST \
+//	BT_LE_ADV_PARAM(BT_LE_ADV_OPT_CONN | BT_LE_ADV_OPT_FILTER_CONN | BT_LE_ADV_OPT_USE_NAME, \
+//			BT_GAP_ADV_FAST_INT_MIN_2, BT_GAP_ADV_FAST_INT_MAX_2, NULL)
+
+//See BT Fundamentals Lesson 5, Ex 2, Filter accept list so only previiously paired devices may connect
 #define BT_LE_ADV_CONN_ACCEPT_LIST \
-	BT_LE_ADV_PARAM(BT_LE_ADV_OPT_CONN | BT_LE_ADV_OPT_FILTER_CONN,                \
-			BT_GAP_ADV_FAST_INT_MIN_2, BT_GAP_ADV_FAST_INT_MAX_2, NULL)
+	BT_LE_ADV_PARAM(BT_LE_ADV_OPT_CONN | BT_LE_ADV_OPT_FILTER_CONN, \
+			BT_GAP_ADV_FAST_INT_MIN_2, BT_GAP_ADV_FAST_INT_MAX_2, NULL)			
 
 static void setup_accept_list_cb(const struct bt_bond_info *info, void *user_data)
 {
+	char addr[BT_ADDR_LE_STR_LEN];
+
 	int *bond_cnt = user_data;
 
 	if ((*bond_cnt) < 0) {
@@ -184,8 +199,11 @@ static void setup_accept_list_cb(const struct bt_bond_info *info, void *user_dat
 	}
 
 	int err = bt_le_filter_accept_list_add(&info->addr);
-	LOG_INF("Added following peer to accept list: %x %x\n", info->addr.a.val[0],
-		info->addr.a.val[1]);
+
+	memcpy(&bond_addr_list[*bond_cnt][0], &info->addr.a, sizeof(info->addr.a));
+
+	bt_addr_le_to_str(&info->addr, addr, sizeof(addr));
+	LOG_INF("Added following peer to accept list #%d: %s\n", *bond_cnt, addr);
 	if (err) {
 		LOG_INF("Cannot add peer to filter accept list (err: %d)\n", err);
 		(*bond_cnt) = -EIO;
@@ -235,19 +253,18 @@ static void start_adv_work_handler(struct k_work *work)
 
 	/* Start advertising with the Accept List */
 	int allowed_cnt = setup_accept_list(BT_ID_DEFAULT);
+	
 	if (allowed_cnt < 0) {
 		LOG_INF("Acceptlist setup failed (err:%d)\n", allowed_cnt);
 	} else {
 		if (allowed_cnt == 0) {
 			LOG_INF("Advertising with no Accept list \n");
 			pairing_mode=true;
-			err = bt_le_adv_start(BT_LE_ADV_CONN_FAST_2, ad, ARRAY_SIZE(ad), sd,
-					      ARRAY_SIZE(sd));
+			err = bt_le_adv_start(BT_LE_ADV_CONN_FAST_2, ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
 		} else {
 			LOG_INF("Advertising with Accept list \n");
 			LOG_INF("Acceptlist setup number  = %d \n", allowed_cnt);
-			err = bt_le_adv_start(BT_LE_ADV_CONN_ACCEPT_LIST, ad, ARRAY_SIZE(ad), sd,
-					      ARRAY_SIZE(sd));
+			err = bt_le_adv_start(BT_LE_ADV_CONN_ACCEPT_LIST, ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
 		}
 		if (err) {
 			LOG_INF("Advertising failed to start (err %d)\n", err);
@@ -268,7 +285,7 @@ K_WORK_DEFINE(stop_adv_work, stop_adv_work_handler);
 
 
 
-#define ADV_TIMEOUT 60
+#define ADV_TIMEOUT 120 //2 minutes
 static void adv_timeout_action(struct k_timer *dummy)
 {
     LOG_INF("Advertising Timeout");
@@ -280,7 +297,16 @@ K_TIMER_DEFINE(adv_timer, adv_timeout_action, NULL);
 
 
 
+uint8_t get_bonded_devices(uint8_t *buf)
+{
+	int num_bonds = 0;
+	ble_stop_advertising();	//stop advertising becuase we can't setup accept list if we are using it.	
 
+	num_bonds = setup_accept_list(BT_ID_DEFAULT);
+
+	memcpy(buf, bond_addr_list, sizeof(bond_addr_list));
+	return (uint8_t) num_bonds;
+}
 
 
 
@@ -339,11 +365,11 @@ void btn2_longpress_action(struct k_timer *dummy)
 K_TIMER_DEFINE(btn1_timer, btn1_longpress_action, NULL);
 K_TIMER_DEFINE(btn2_timer, btn2_longpress_action, NULL);
 
-//void sensor_thread(void);
+// void sensor_thread(void);
 
-//K_THREAD_DEFINE(sensor_thread_id, SENSOR_STACKSIZE, sensor_thread, NULL, NULL, NULL, SENSOR_PRIORITY, 0, 0); 
+// K_THREAD_DEFINE(sensor_thread_id, SENSOR_STACKSIZE, sensor_thread, NULL, NULL, NULL, SENSOR_PRIORITY, 0, 0); 
 
- static const uint8_t action3Msg[] = { 0xB0, 0x00, 0x01, 0x07, 0x20, 0x30,  0x07, 0x02, 0x00, 0x00, 0x00}; //3020.7-8
+//static const uint8_t action3Msg[] = { 0xB0, 0x00, 0x01, 0x07, 0x20, 0x30,  0x07, 0x02, 0x00, 0x00, 0x00}; //3020.7-8
 
 
 /*ADC definitions and includes*/
@@ -1179,6 +1205,7 @@ void ble_stop_advertising(void){
 int main(void)
 {
 	int err = 0;
+	//char *device_name = "WL_1234";
 
 	
 
@@ -1216,14 +1243,21 @@ int main(void)
 	if (err) {
 		error();
 	}
-
 	LOG_INF("Bluetooth initialized");
-
-	k_sem_give(&ble_init_ok);
-
+	
 	if (IS_ENABLED(CONFIG_SETTINGS)) {
 		settings_load();
 	}
+	
+	// err = bt_set_name(device_name);
+    // if (err) {
+    //     // Handle error if setting the name failed
+    //     LOG_ERR("Failed to set Bluetooth device name: %d\n", err);
+    // } else {
+    //     LOG_INF("Bluetooth device name set to: %s\n", device_name);
+    // }
+
+
 
 	err = bt_nus_init(&nus_cb);
 	if (err) {
@@ -1231,8 +1265,11 @@ int main(void)
 		return;
 	}
 
+	k_sem_give(&ble_init_ok);
+
 	init_adc();
 	spi_init();
+	initIMU();
 	LOG_INF("SPI initialized");
 
 	err = flash_init();
@@ -1264,6 +1301,7 @@ int main(void)
 	k_sleep(K_MSEC(300)); 
 	dk_set_led_off(RED_LED);
 
+	
 	ble_start_advertising();
 	
 	k_sleep(K_MSEC(100)); //pauses for logging to catch up
@@ -1415,10 +1453,10 @@ K_THREAD_DEFINE(implant_reqresp_thread_id, IMP_STACKSIZE, implant_reqresp_thread
 
 
 
-//////////  IMU Sensorn: move to own file?
+////////  IMU Sensorn: move to own file?
 
 
-//static const struct device *sensor = DEVICE_DT_GET(DT_INST(0,st_ism330is));
+// static const struct device *sensor = DEVICE_DT_GET(DT_INST(0,st_ism330is));
 
 // void enable_sensor(uint8_t enable)
 // {

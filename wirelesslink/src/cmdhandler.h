@@ -6,9 +6,9 @@
 #include <stdbool.h>
 #include <string.h>
 
-#define WL_IN_CHARGER false
+#define WL_IN_CHARGER true
 #define HW_REV 1 //up to 65535
-#define SW_REV 8 //up to 65535
+#define SW_REV 9 //up to 65535
 
 #define PKT_HEADER_LEN 3
 #define MIN_PKT_LEN PKT_HEADER_LEN // when checksum added, this will change
@@ -141,5 +141,6 @@ void setLEDs( uint8_t red, uint8_t green, uint8_t blue);
 uint8_t erasebonds(void);
 void ble_start_advertising_pairing_mode(void);
 uint32_t getpasskey(void);
+uint8_t get_bonded_devices(uint8_t *buf);
 
 #endif

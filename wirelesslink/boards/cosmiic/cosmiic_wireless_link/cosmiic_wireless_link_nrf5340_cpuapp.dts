@@ -23,7 +23,7 @@
 	};
 
 	zephyr,user {
-		io-channels = <&adc 6>;
+		io-channels = <&adc 0>;
 	};
 };
 

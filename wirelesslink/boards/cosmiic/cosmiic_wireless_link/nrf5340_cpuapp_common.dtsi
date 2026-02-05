@@ -127,11 +127,6 @@
 	load-capacitance-picofarad = <7>;
 };
 
-/ {
-	zephyr,user {
-		io-channels = <&adc 0>; //what does this do?
-	};
-};
 
 &adc {
 	#address-cells = <1>;
@@ -244,11 +239,12 @@
 	pinctrl-1 = <&i2c2_sleep>;
 	pinctrl-names = "default", "sleep";
     clock-frequency = <100000>;  //NHD-Display only supports 50KHz
-    ism330is@6A{
+    ism330is:ism330is@6A{
         status = "okay";
          compatible = "i2c-device"; //generic, no driver used
         reg=<0x6A>;
         //irq-gpios=<&gpio1 12 GPIO_ACTIVE_HIGH>,<&gpio1 13 GPIO_ACTIVE_HIGH>;
+		label = "IMU-ISM330IS";
     };
     //The following are only used for the WL within the charger:
     lcddisplay:lcddisplay@3c{
@@ -325,6 +321,10 @@ zephyr_udc0: &usbd {
 &uicr {
 	nfct-pins-as-gpios;
 };
+
+
+
+
 
 /* Include default memory partition configuration file */
 #include <nordic/nrf5340_cpuapp_partition.dtsi>

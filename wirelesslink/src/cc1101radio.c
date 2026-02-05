@@ -185,6 +185,11 @@ static struct
 #define RADIO_TX_POWER 20
 #define RADIO_CHAN 3
 #define RADIO_ADDR 1
+#define RADIO_ADDR_PM 2
+#define RADIO_TX_POWER 20
+#define RADIO_WOR_INT 20
+#define RADIO_RX_TIMEOUT 100
+#define RADIO_RETRIES 0
 
 /*************
 	Chipcon
@@ -717,7 +722,7 @@ void initRadioConfig( void )
 	
 	uint8_t   ccValue;
 	struct CcInit *reg;
-	uint8_t	buf[7];
+	
 
 	radio.state = RS_IDLE;
 	resetRadio();
@@ -747,18 +752,22 @@ void initRadioConfig( void )
 	}
 	
 	//store default settings in radio structure
-	radio.localAddress = RADIO_ADDR;
-	radio.remoteAddress = 2;
-	radio.channel = RADIO_CHAN;
-	radio.txPower = RADIO_TX_POWER;
-	radio.worInterval = 20;
-	radio.rxTimeout = 100;
-	radio.retries = 0;
 	radio.inSession = false;
 	radio.newSession = false;
 	radio.sessionTime = 0; //JML hard coded - this should be one of the flash settings, use 5 for MedRadio
 	
 	configureRadioInterrupt(); //radio interrupt configured in wlgpio.c
+	loadRadioSettingsFromFlash();	
+
+
+	k_thread_suspend(medRadio_session_thread_id);
+
+	k_sem_give(&medradio_init_ok);
+
+}
+
+void loadRadioSettingsFromFlash(void) {
+	uint8_t	buf[7];
 
 	if(saved_settings_read(RADIO_SETTINGS_ID, buf, sizeof(buf)) > 0)
 	{
@@ -770,20 +779,32 @@ void initRadioConfig( void )
 		updateMedRadioWORInterval(buf[4]);
 		updateMedRadioRXTimeout(buf[5]);
 		updateMedRadioRetries(buf[6]);
-
 	} else{
-		LOG_INF("No Radio settings found in flash");
+		updateMedRadioLocalAddress(RADIO_ADDR);
+		updateMedRadioRemoteAddress(RADIO_ADDR_PM);
+		updateMedRadioChannel(RADIO_CHAN);
+		updateMedRadioTXPower(RADIO_TX_POWER);
+		updateMedRadioWORInterval(RADIO_WOR_INT);
+		updateMedRadioRXTimeout(RADIO_RX_TIMEOUT);
+		updateMedRadioRetries(RADIO_RETRIES);
+
 	}
-
-	k_thread_suspend(medRadio_session_thread_id);
-
-	k_sem_give(&medradio_init_ok);
-
 }
 
+void loadRadioSettingsForPMBoot(void){
+	updateMedRadioLocalAddress(0xBC);
+	updateMedRadioRemoteAddress(0xBC);
+	updateMedRadioChannel(5);
+	updateMedRadioTXPower(20);
+	updateMedRadioWORInterval(0);
+	updateMedRadioRXTimeout(50);
+	updateMedRadioRetries(5);
+}
 
-
-
+uint16_t getTaskTimeoutForMedRadio(void)
+{
+	return (radio.worInterval + radio.rxTimeout + 2)*(radio.retries+1) + 2;
+}
 
 
 

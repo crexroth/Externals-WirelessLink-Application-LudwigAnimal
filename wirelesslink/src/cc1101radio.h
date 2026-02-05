@@ -23,20 +23,6 @@
 #include <string.h>
 
 
-
-
-// -------- DEFINITIONS ----------
-#define APPCODE_ADDRESS	0x04
-#define TOWER_ADDRESS	0x03
-
-#define RADIO_TX_TIMEOUT_TICKS  50/MS_PER_TICK
-
-#define RAD_INT 26
-
-
-// --------   DATA   ------------
-extern uint8_t remoteAddress;
-
 extern struct k_msgq imp_resp_msgq;
 extern struct k_msgq imp_req_msgq;
 extern struct k_sem medradio_init_ok;
@@ -62,7 +48,9 @@ void initRadioConfig( void );
 void sendRadioPacket(const uint8_t *data, uint8_t dataLen );
 uint8_t getRadioPacket( uint8_t *data );
 uint8_t clearChannelSearch(uint8_t dwell, int8_t* maxRSSI, int8_t* avgRSSI);
-
+void loadRadioSettingsFromFlash(void);
+void loadRadioSettingsForPMBoot(void);
+uint16_t getTaskTimeoutForMedRadio(void);
 void idleMedRadio(void);
 void powerDownRadio(void);
 uint16_t getMedRadioTimeout( void );

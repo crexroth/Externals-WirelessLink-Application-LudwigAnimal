@@ -7,8 +7,11 @@ cmake_minimum_required(VERSION 3.20.0)
 
 list(APPEND BOARD_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/boards)
 set(PM_STATIC_YML_FILE ${CMAKE_CURRENT_SOURCE_DIR}/pm_static.yml)
+#list(APPEND ZEPHYR_EXTRA_MODULE  ${CMAKE_CURRENT_SOURCE_DIR}/drivers)
+
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(NONE)
+
 
 # NORDIC SDK APP START
 target_sources(app PRIVATE
@@ -19,8 +22,10 @@ target_sources(app PRIVATE
   src/audio.c
   src/charger.c
   src/wlgpio.c
+  src/imu.c
 )
 
+#add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/drivers)
 
 # NORDIC SDK APP END
 

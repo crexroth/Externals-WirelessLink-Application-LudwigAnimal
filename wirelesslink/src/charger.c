@@ -28,51 +28,49 @@ typedef struct
 } THERMTBL;
 
 
+//degC(100=10.0), adsCounts   based on 32768 FS
 static THERMTBL const thermTable[] =
-{
-	//degC(100=10.0), adsCounts   based on 32768 FS
-	100,	23798,
-	110,	23483,
-	120,	23163,
-	130,	22839,
-	140,	22511,
-	150,	22179,
-	160,	21844,
-	170,	21506,
-	180,	21164,
-	190,	20821,
-	200,	20475,
-	210,	20127,
-	220,	19778,
-	230,	19427,
-	240,	19076,
-	250,	18725,
-	260,	18373,
-	270,	18021,
-	280,	17670,
-	290,	17320,
-	300,	16971,
-	310,	16623,
-	320,	16278,
-	330,	15933,
-	340,	15592,
-	350,	15253,
-	360,	14915,
-	370,	14586,
-	380,	14256,
-	390,	13931,
-	400,	13609,
-	410,	13291,
-	420,	12977,
-	430,	12668,
-	440,	12363,
-	450,	12063,
-	460,	11764,
-	470,	11473,
-	480,	11190,
-	490,	10909,
-	500,	10634
-};
+{	{100,	23798},
+	{110,	23483},
+	{120,	23163},
+	{130,	22839},
+	{140,	22511},
+	{150,	22179},
+	{160,	21844},
+	{170,	21506},
+	{180,	21164},
+	{190,	20821},
+	{200,	20475},
+	{210,	20127},
+	{220,	19778},
+	{230,	19427},
+	{240,	19076},
+	{250,	18725},
+	{260,	18373},
+	{270,	18021},
+	{280,	17670},
+	{290,	17320},
+	{300,	16971},
+	{310,	16623},
+	{320,	16278},
+	{330,	15933},
+	{340,	15592},
+	{350,	15253},
+	{360,	14915},
+	{370,	14586},
+	{380,	14256},
+	{390,	13931},
+	{400,	13609},
+	{410,	13291},
+	{420,	12977},
+	{430,	12668},
+	{440,	12363},
+	{450,	12063},
+	{460,	11764},
+	{470,	11473},
+	{480,	11190},
+	{490,	10909},
+	{500,	10634} };
 
 #define LOG_MODULE_NAME charger
 LOG_MODULE_REGISTER(LOG_MODULE_NAME);
@@ -322,8 +320,6 @@ uint32_t getCoilPeriod(void)
 void coil_reqresp_thread(void)
 {
 	int err = 0;
-    uint8_t response[MAX_COIL_RESPONSE_LEN]; 
-    uint8_t response_len = 0;
     uint8_t checksum = 0;
     uint8_t i = 0;
 
@@ -550,7 +546,6 @@ void configCDPower(void)
 	int ret = i2c_write_dt(&dev_i2c_cdpwr, write_buf, sizeof(write_buf));
 	if(ret != 0){
 		LOG_INF("Failed to write/read to I2C device address %x at reg \n\r", dev_i2c_cdpwr.addr);
-		return 0;
 	}
 }
 
@@ -799,7 +794,7 @@ void writeRTC(uint8_t *rtc)
 
 	LOG_INF("Setting RTC");
 
-	memcpy(&write_buf[1], rtc, sizeof(write_buf));
+	memcpy(&write_buf[1], rtc, 7);
 	
 	ret = i2c_write_dt(&dev_i2c_rtc, write_buf, sizeof(write_buf));
 	if(ret != 0){
@@ -1072,7 +1067,6 @@ uint8_t setChargeMode(uint8_t mode)
 
 void charger_thread(void)
 {
-	int err;
 	char str[80];
 	uint8_t cnt;
 	uint8_t rtc[7] = {0,0,0,0,0,0,0}; //sec, min, hour, weekday, day, month, year 
@@ -1206,8 +1200,6 @@ void charger_thread(void)
 
 void initSD(void)
 {
-	uint8_t n=0, i=0;
-	char str[30];
 	int res;
 	/* raw disk i/o */
 	do {
@@ -1286,12 +1278,10 @@ uint32_t getLogLength()
 {
 	char path[] =  "/SD:";
 	char filename[] = "logfile.dat";
-	int err = 0;
 	uint32_t len = 0;
 	int res;
 	struct fs_dir_t dirp;
 	static struct fs_dirent entry;
-	int count = 0;
 
 	fs_dir_t_init(&dirp);
 
@@ -1421,15 +1411,13 @@ void tuneCoil(void)
 	uint16_t voltageSetting = 5000; //5V
 	uint16_t min_freq = 3450;
 	uint16_t max_freq = 3550;
-	uint16_t opt_freq; //in Hz
+	uint16_t opt_freq = 0; //in Hz
 	uint16_t freq = min_freq;
 	uint16_t max_current = 0; //in mA
 	uint16_t current = 0; //in mA
-	uint8_t err;
-	uint8_t result[4];
 	uint32_t period;
 	uint16_t opt_period = 0;
-	char str[20];
+	char str[21];
 	uint8_t n = 0;
 
 
@@ -1511,7 +1499,6 @@ void tuneCoil(void)
 void metalDetect(void)
 {
 
-	int err;
 	uint16_t voltageSetting = 5000; //4V
 	int16_t max_current = chargerParams.maxcurrent; //in mA
 	int16_t current = 0; //in mA
@@ -1522,8 +1509,8 @@ void metalDetect(void)
 
 
 	uint64_t timeCheck;
-	char str[20];
-	bool doSave = false, commSuccess = true;;
+	char str[21];
+	bool commSuccess = true;;
 
 	uint8_t data = 0;
 	uint8_t target = 0;
@@ -1559,9 +1546,9 @@ void metalDetect(void)
 	k_msleep(1000);
 	OutputDisplay(0, "     Target:        ", "   Current:         ","   Minimum:         ","   Maximum:         ",20,20,20,20 );
 
-	sprintf(str, "    Target: %4d mA ", thresh_current);
+	sprintf(str, "   Target:%6d mA ", thresh_current);
 	OutputDisplayLine(1, str, 20);
-	sprintf(str, "   Maximum: %4d mA ", max_current);
+	sprintf(str, "  Maximum:%6d mA ", max_current);
 	OutputDisplayLine(4, str, 20);
 
 	LOG_INF("Failed to get CD Power");
@@ -1577,20 +1564,20 @@ void metalDetect(void)
 
 		if(getCDPower(&current, &voltage))
 		{
-			sprintf(str, "   Current: %4d mA ", current);
+			sprintf(str, "  Current:%6d mA ", current);
 			OutputDisplayLine(2, str, 20);
 			LOG_INF("Current:%d", current);
 			
 			if(current > max_current)
 			{
 				max_current = current;
-				sprintf(str, "   Maximum: %4d mA ", max_current);
+				sprintf(str, "  Maximum:%6d mA ", max_current);
 				OutputDisplayLine(4, str, 20);
 			}
 			if(current > 0  && current < min_current)
 			{
 				min_current = current;
-				sprintf(str, "   Minimum: %4d mA ", min_current);
+				sprintf(str, "  Minimum:%6d mA ", min_current);
 				OutputDisplayLine(3, str, 20);
 			}
 			setBuzzerPeriod(1912, 0);
@@ -1688,24 +1675,30 @@ void setChargerParams(uint8_t* params)
 #define TARGET_MAX      100
 #define TARGET_MIN      20
 
-#define TIME_OUT_RADIO     30 //in s
-#define TIME_OUT_COUPLING  120 //in s
-#define TIME_OUT_COILTEMP   5 //in s
-#define TIME_TO_BOOT	   20 //in s
-#define TIME_WARN_RADIO     5 //in s
+#define TIME_OUT_APP       60 //in s  (max time to get into app mode, coil at 5V )
+#define TIME_OUT_RADIO     10 //in s  (max time between successful radio commands, coil may be higher)
+#define TIME_BOOT_TO_APP    2 //in s  (time to get between boot and app...radio commands expected to fail)
+#define TIME_OUT_COUPLING  120 //in s (max time with insufficient coupling (charging command = 0))
+#define TIME_OUT_COILTEMP   5 //in s  (max time with invalid external coil temperature)
+#define TIME_TO_BOOT	   16 //in s  (expected time for PM to get through boot to app)
+#define TIME_WARN_RADIO     5 //in s 
 #define TIME_WARN_COUPLING  5// in s
 
 #define CHARGING_ERROR_NONE         0
-#define CHARGING_ERROR_RADIO        1
-#define CHARGING_ERROR_PMTEMP       2
-#define CHARGING_ERROR_PMTEMP_OPEN  3
-#define CHARGING_ERROR_CHARGERTEMP  4
-#define CHARGING_ERROR_COILTEMP1    5
-#define CHARGING_ERROR_COILTEMP2    6
-#define CHARGING_ERROR_COUPLING     7
-#define CHARGING_ERROR_SYSCURRENT   8
-#define CHARGING_ERROR_CDCURRENT    9
-#define CHARGING_ERROR_CDVOLTAGE    10
+#define CHARGING_ERROR_RADIO        1 //timed out on radio but did communicate with app
+#define CHARGING_ERROR_STALE        2 //timed out on because PM wasn't updating
+#define CHARGING_ERROR_NO_PM        3 //timed out waiting, never communicated to PM
+#define CHARGING_ERROR_NO_APP       4 //timed out waiting to get into app mode, but communicated in Boot mode
+#define CHARGING_ERROR_PMTEMP       5
+#define CHARGING_ERROR_PMTEMP_OPEN  6
+#define CHARGING_ERROR_CHARGERTEMP  7
+#define CHARGING_ERROR_COILTEMP1    8
+#define CHARGING_ERROR_COILTEMP2    9
+#define CHARGING_ERROR_COUPLING     10
+#define CHARGING_ERROR_SYSCURRENT   11
+#define CHARGING_ERROR_CDCURRENT    12
+#define CHARGING_ERROR_CDVOLTAGE    13
+
 
 #define PLAYSOUND_NONE       0
 #define PLAYSOUND_COUPLE     1
@@ -1724,11 +1717,14 @@ void setChargerParams(uint8_t* params)
 #define VREC_MAX_QUICK    210  //avoid VREC above 20V ever
 
 #define DISPLAY_NONE 0
-#define DISPLAY_BOOT 1
-#define DISPLAY_PMFEEDBACK 2
-#define DISPLAY_RADIO_WARN 3
-#define DISPLAY_PMCONFIG 4
-#define DISPLAY_NO_FEEDBACK 5
+#define DISPLAY_WAITINGFORBOOT 1
+#define DISPLAY_BOOT_RADIO_MATCH 2
+#define DISPLAY_BOOT_RADIO_MISMATCH 3
+#define DISPLAY_PMFEEDBACK 4
+#define DISPLAY_RADIO_WARN 5
+#define DISPLAY_SERIAL_REV 6
+#define DISPLAY_SET_CLOCK  7
+#define DISPLAY_NO_FEEDBACK 8
 
 #define MAX_COIL_VOLTAGE_NOFEEDBACK 6500 //in mV
 
@@ -1810,8 +1806,6 @@ void charge(void)
 	uint16_t minVoltageSetting = 4000; //4V
 	uint16_t maxVoltageSetting = 8000; //8V
 	uint16_t stepVoltage = 10; //0.01V 10mV minimum
-	uint16_t max_current = 0; //in mA
-	uint16_t current = 0; //in mA
 	int8_t delta;
 
 	
@@ -1829,7 +1823,7 @@ void charge(void)
 
 
 	
-	char str[80];
+	char str[81]; //leave space for null character
 	char charWarnCoilTemp; 
 	char charWarnPMTemp;
 	char charWarnCoupling;
@@ -1838,12 +1832,9 @@ void charge(void)
 	uint8_t disptarg = 0;
 	uint8_t buf[8];
 	uint16_t previous_test;
-	int t = 0;
-	int k = 60;
 
-	bool madeRadioContact = false;
-
-	uint8_t setPMClock = 1;
+	uint16_t serialPM = 0, revPM = 0; //serialPM becomes nonzero when successfully queried from PM App
+	uint8_t configPM = 0; 
 
 	uint16_t B1V = 0, B2V = 0, B3V = 0, BavgV = 0, vrec = 0, tempPM = 0, test = 0, NCL = 0 ;
 	int16_t B1I = 0, B2I = 0, B3I = 0, BavgI = 0;
@@ -1853,17 +1844,12 @@ void charge(void)
 	
 	uint16_t delayCycle;
 	uint64_t timeCycle;
-	uint64_t timeCheckRadio;
-	uint64_t timeCheckCoupling;
-	uint64_t timeCheckTargetChange;
-	uint64_t timeCheckBootloader;
-	uint64_t timeCheckCoil;
+	uint64_t timeCheckAppRadio, timeCheckBootRadio, timeCheckCoupling, timeCheckTargetChange, timeCheckStart, timeCheckBootloader, timeCheckCoil;
 	uint32_t timeSince;
 	uint16_t vrecMin = VREC_MIN_STEPPING; 
 	uint16_t vrecMax = VREC_MAX_STEPPING;
 
 	uint8_t resp[21];
-	uint8_t resp_len = 0;
 	uint8_t cntTempPM = 0;
 
 	uint16_t currentCD = 0, voltageCD = 0, currentSys = 0, voltageSys = 0,tempCD = 0;
@@ -1871,7 +1857,6 @@ void charge(void)
 	uint8_t chargingError = CHARGING_ERROR_NONE;
 	bool fullUpdate = false;
 	
-	int err;
 	
 	struct audioList_type audioList;
 	uint8_t displayMode = DISPLAY_NONE;
@@ -1887,11 +1872,14 @@ void charge(void)
 	startDCDC();
 	startCoilDrive();
 
-	timeCheckRadio = k_uptime_get();
-	timeCheckCoupling = timeCheckRadio;
-	timeCheckTargetChange = timeCheckRadio;
-	timeCheckCoil = timeCheckRadio;
-	timeCheckBootloader = timeCheckRadio;
+	timeCheckStart = k_uptime_get();
+	timeCheckCoupling = timeCheckStart; //time since last good coupling or Start
+	
+	timeCheckBootRadio = timeCheckStart; //time since last message with PM Boot or Start
+	timeCheckTargetChange = timeCheckStart; //time since last changing of charging target or Start
+	timeCheckCoil = timeCheckStart; //time since last valid Coil temperature check or Start
+	timeCheckBootloader = 0; //time since first successful sequential messages with PM Boot 
+	timeCheckAppRadio = 0; //time since last message with PM App 
 	//startWatchdog();
 
 	bool madeChangeLastCycle = true;
@@ -1899,7 +1887,8 @@ void charge(void)
 	OutputDisplay(1, "","","","",0,0,0,0 ); //Clear Display
 	
 	uint8_t radioIndicator;
-	int8_t rssi;
+	uint8_t addrAP = 0, addrPM = 0, chan = 0, power = 0, bootradio = 0;
+	bool hasCommunicated = false; 
 	
 	setIconVoltage(0); 
 	setIconRSSI(0);
@@ -1926,7 +1915,6 @@ void charge(void)
 				chargingError = CHARGING_ERROR_SYSCURRENT;
 				break;
 			}
-
 		}
 		else
 		{
@@ -1953,6 +1941,7 @@ void charge(void)
 			LOG_INF("Failed to get CD Power");
 		}
 
+		//Get Coil temperature
 		tempCD = getThermistor();
 		if(tempCD > COIL_OPEN_TEMP)
 		{
@@ -1966,8 +1955,6 @@ void charge(void)
 			break;
 		}
 			
-		
-		
 		if(tempCD <= COIL_OPEN_TEMP)
 		{
 			LOG_INF("Failed to get CD Thermistor");
@@ -1984,57 +1971,168 @@ void charge(void)
 			displayMode = DISPLAY_NO_FEEDBACK;
 
 		}
-		else{
-
-			//Generate and send out a message to the PM
-			if (setPMClock == 1)
+		else{ //CHARGER_MODE_CHARGE: Charge with feedback from PM
+			//First, check timoeuts
+			if ((k_uptime_get()-timeCheckCoupling)/1000 > TIME_OUT_COUPLING )
 			{
-				if(NMT(7, 0x97, 0, 0)) //Halt PM RTC
-				{
-					setPMClock = 2;
-					LOG_INF("\n ** HALT PM RTC ** \n");
-					madeRadioContact = true;
-				}
-				else
-				{
-					//JML TODO: how many times to retry?
-				} 
+				chargingError = CHARGING_ERROR_COUPLING;
+				break;
 			}
-			else if (setPMClock == 2)
-			{
-				//set date and time from same RTC read:
 
-				buf[0] = getDate(rtc); //date
-				buf[1] = getMonth(rtc); //month
-				buf[2] = (uint8_t) ((2000 + (uint16_t) getYear(rtc))&0xFF); //year LB
-				buf[3] = (uint8_t) ((2000 + (uint16_t) getYear(rtc))>>8); //year HB
-				buf[4] = getSeconds(rtc); //seconds
-				buf[5] = getMinutes(rtc); //minutes
-				buf[6] = getHours(rtc); //hours
-				buf[7] = getDayOfWeek(rtc); //day of week
-				if(WriteSDO(7, 0x2004, 1, 2, buf, 8)) 
-				{
-					//set Date on PM successful		   
-					LOG_INF("\n ** SET PM DATE/TIME ** \n");
-					setPMClock = 3;
-				}
-				else
-				{
-					LOG_INF("Set PM date/time unconfirmed");
-					//JML TODO: how many times to retry?
-				} 
-			}
-			else if (setPMClock == 3)
+			if (timeCheckAppRadio != 0)
 			{
-				if(NMT(7, 0x88, 0, 0)) //Set PM RTC
+				if((k_uptime_get()-timeCheckAppRadio)/1000 > TIME_OUT_RADIO)
 				{
-					setPMClock = 0;
-					LOG_INF("\n ** Set/Start PM RTC ** \n");
+					chargingError = CHARGING_ERROR_RADIO;
+					break;
 				}
-				else
+			}
+			else
+			{
+				if((k_uptime_get()-timeCheckStart)/1000 > TIME_OUT_APP)
 				{
-					LOG_INF("Set/Start PM RTC unconfirmed");
-					//JML TODO: how many times to retry?
+					if (hasCommunicated)
+					{
+						chargingError = CHARGING_ERROR_NO_APP;
+					}
+					else
+					{
+						chargingError = CHARGING_ERROR_NO_PM;
+					}
+					break;
+				}
+			}
+
+			if( serialPM == 0 )  //We have not yet made radio contact with this PM in App mode....likely in bootloader mode
+			{ 
+				if(ReadSDO(7, 0x1018, 3, 2, buf) == 8) //Read PM Rev and Serial 
+				{
+					timeCheckAppRadio = k_uptime_get();
+				    revPM    = (uint16_t) buf[0] + (((uint16_t) buf[1]) << 8);
+					serialPM = (uint16_t) buf[4] + (((uint16_t) buf[5]) << 8);
+					LOG_INF("Found PM#%d, rev %d", serialPM, revPM);
+					hasCommunicated = true;
+					displayMode = DISPLAY_SERIAL_REV;
+					configPM = 1;
+				}
+				else{ //PM may still be in bootloader mode
+					loadRadioSettingsForPMBoot();
+					bootradio = getAppRadioFromPMBoot(&addrAP, &addrPM, &chan, &power);
+					loadRadioSettingsFromFlash();
+					
+					if(bootradio)
+					{
+						hasCommunicated = true;
+						timeCheckBootRadio = k_uptime_get();
+						if(timeCheckBootloader == 0) 
+						{
+							timeCheckBootloader = timeCheckBootRadio;
+						}
+
+						LOG_INF("***** Found implant in BL Mode!");
+						copyRadioSettings(buf);
+						if(addrAP == buf[0] && addrPM == buf[1] && chan == buf[2] && power == buf[3]){
+							displayMode = DISPLAY_BOOT_RADIO_MATCH;
+							LOG_INF("App readio settings good");
+						}
+						else{
+							displayMode = DISPLAY_BOOT_RADIO_MISMATCH;
+							updateMedRadioLocalAddress(addrAP);
+							updateMedRadioRemoteAddress(addrPM);
+							updateMedRadioChannel(chan);
+							updateMedRadioTXPower(power);
+							copyRadioSettings(&buf[0]);
+							saved_settings_write(RADIO_SETTINGS_ID, buf, 7);
+							LOG_INF("App readio settings don't match flash");
+						}
+					}
+					else{
+						LOG_INF("***** Could not Find implant in BL Mode");
+						if (addrPM == 0 || (k_uptime_get()-timeCheckBootRadio)/1000 > TIME_BOOT_TO_APP) 
+						{
+							//The charger hasn't detected a PM yet in either App or BL Mode or has missed more messages than expected 
+							displayMode = DISPLAY_WAITINGFORBOOT;
+							timeCheckBootloader = 0;   //PM may have lost power, restart bootloader clock
+						}
+						timeCheckBootloader = 0;   //PM may have lost power, restart bootloader clock
+						//JML TODO: consider turning on and off the coil here or suggesting magnet
+					}
+				}
+			}
+			else if (configPM)
+			{
+				if (configPM == 1)
+				{
+					if(ReadSDO(7, 0x2004, 1, 2, buf)==8) 
+					{
+						//Check if the time is already set on the PM and is accurate to within a minute of the PM. 
+						//JML Note: This does not account for rollovers in hour/day/month/year, but it doesn't matter if we set the clock again
+						if (buf[0] == getDate(rtc) && //date
+							buf[1] == getMonth(rtc) && //month
+							buf[2] == (uint8_t) ((2000 + (uint16_t) getYear(rtc))&0xFF) && //year LB  
+							buf[3] == (uint8_t) ((2000 + (uint16_t) getYear(rtc))>>8) && //year HB
+							buf[6] == getHours(rtc) &&  //hours
+							abs(buf[5] - getMinutes(rtc)) <=1){ //minutes
+							LOG_INF("Clock already set");
+							configPM = 0;
+							
+						}
+						else{
+							//got a valid time but it doesn't match, set clock
+							displayMode = DISPLAY_SET_CLOCK;
+							configPM = 2;
+						}
+					} 
+				}
+				//Generate and send out a message to the PM
+				if (configPM == 2)
+				{
+					if(NMT(7, 0x97, 0, 0)) //Halt PM RTC
+					{
+						configPM = 3;
+						LOG_INF("\n ** HALT PM RTC ** \n");
+					}
+					else
+					{
+						//JML TODO: how many times to retry?
+					} 
+				}
+				if (configPM == 3)
+				{
+					//set date and time from same RTC read:
+
+					buf[0] = getDate(rtc); //date
+					buf[1] = getMonth(rtc); //month
+					buf[2] = (uint8_t) ((2000 + (uint16_t) getYear(rtc))&0xFF); //year LB
+					buf[3] = (uint8_t) ((2000 + (uint16_t) getYear(rtc))>>8); //year HB
+					buf[4] = getSeconds(rtc); //seconds
+					buf[5] = getMinutes(rtc); //minutes
+					buf[6] = getHours(rtc); //hours
+					buf[7] = getDayOfWeek(rtc); //day of week
+					if(WriteSDO(7, 0x2004, 1, 2, buf, 8)) 
+					{
+						//set Date on PM successful		   
+						LOG_INF("\n ** SET PM DATE/TIME ** \n");
+						configPM = 4;
+					}
+					else
+					{
+						LOG_INF("Set PM date/time unconfirmed");
+						//JML TODO: how many times to retry?
+					} 
+				}
+				if (configPM == 4)
+				{
+					if(NMT(7, 0x88, 0, 0)) //Set PM RTC
+					{
+						configPM = 0;
+						LOG_INF("\n ** Set/Start PM RTC ** \n");
+					}
+					else
+					{
+						LOG_INF("Set/Start PM RTC unconfirmed");
+						//JML TODO: how many times to retry?
+					}
 				}
 			}
 			else if (target == 0xFF)
@@ -2068,7 +2166,7 @@ void charge(void)
 					//JML TODO: how many times to retry?
 				} 
 			}
-			else
+			else //Attempt full update
 			{
 				//SDO read 7:3000:0D, resp is 21 uint8_ts
 				n = ReadSDO(7, 0x3000, 0x0D, 1, resp);
@@ -2079,6 +2177,17 @@ void charge(void)
 				
 					if(modeLED & LED_CHARGER) setLEDs(1,2,2); //set red LED
 
+					timeSince = (k_uptime_get()-timeCheckAppRadio)/1000;
+					if (timeSince > TIME_WARN_RADIO )
+					{
+						displayMode = DISPLAY_RADIO_WARN;
+					}
+					else if (fullUpdate)
+					{
+						//leave screen with stagnant PM data and updated Coil data
+						//JML: warning triangles are currently missing, because they are cleared each cycle
+						displayMode = DISPLAY_PMFEEDBACK;
+					}
 				}
 				else
 				{
@@ -2105,7 +2214,7 @@ void charge(void)
 							rtc[2], /*hour*/
 							rtc[1], /*minute*/
 							rtc[0], /*second*/ 
-							(uint32_t)(k_uptime_get()-timeCheckBootloader)/100, /* time in 0.1s since starting charge */
+							(uint32_t)(k_uptime_get()-timeCheckStart)/100, /* time in 0.1s since starting charge */
 							tempCD,	voltageCD,	currentCD,
 							tempPM, vrec, B1V, B2V, B3V, B1I, B2I, B3I, cmd, target); 
 
@@ -2119,17 +2228,17 @@ void charge(void)
 					LOG_INF("test:%d", test);
 					if (test != previous_test)
 					{
-						timeCheckRadio = k_uptime_get(); //update timeCheck, valid radio message and PM is updating
+						timeCheckAppRadio = k_uptime_get(); //Valid app radio message and PM is updating
 					}
 					else{
 						LOG_INF("PM Test value not changing");
 						//PM repeating same packet?
 						if(modeLED & LED_CHARGER) setLEDs(1,2,2); //set Red LED
-						timeSince = (k_uptime_get()-timeCheckRadio)/1000;
+						timeSince = (k_uptime_get()-timeCheckAppRadio)/1000;
 						LOG_INF("No response: Time since last PM test change: %ds", timeSince);
 						if (timeSince > TIME_OUT_RADIO )
 						{
-							chargingError = CHARGING_ERROR_RADIO;
+							chargingError = CHARGING_ERROR_STALE;
 							break;
 						}
 					}
@@ -2137,7 +2246,7 @@ void charge(void)
 
 					if(cmd > 0)
 					{
-						timeCheckCoupling = k_uptime_get(); 
+						timeCheckCoupling = k_uptime_get(); //Good coupling confirmed, implant charging
 						if(status != COUPLED)
 						{	
 							playsound = PLAYSOUND_COUPLE;
@@ -2146,14 +2255,7 @@ void charge(void)
 					}
 					else
 					{
-						timeSince = (k_uptime_get()-timeCheckCoupling)/1000;
-						LOG_INF("No response: Time since last coupled: %ds", timeSince);
-						if (timeSince > TIME_OUT_COUPLING )
-						{
-							chargingError = CHARGING_ERROR_COUPLING;
-							break;
-						}
-						else if (timeSince > TIME_WARN_COUPLING )
+						if ((k_uptime_get()-timeCheckCoupling)/1000 > TIME_WARN_COUPLING )
 						{
 							charWarnCoupling=0x10;
 
@@ -2336,90 +2438,70 @@ void charge(void)
 				} 
 			}
 
-			if(!madeRadioContact) 
-			{
-				timeSince =  (k_uptime_get()-timeCheckBootloader)/1000;
-			}
-			if (madeRadioContact || (!madeRadioContact && timeSince >= TIME_TO_BOOT))
-			{
-				timeSince = (k_uptime_get()-timeCheckRadio)/1000;
-				if (timeSince > TIME_OUT_RADIO )
-				{
-					chargingError = CHARGING_ERROR_RADIO;
-					break;
-				}
-				else if (timeSince > TIME_WARN_RADIO && fullUpdate)
-				{
-					displayMode = DISPLAY_RADIO_WARN;
-					if(modeLED & LED_CHARGER) setLEDs(1,2,2); //set red LED
-				}
-				else if (fullUpdate)
-				{
-					//leave screen with stagnant PM data and updated Coil data
-					//JML: warning triangles are currently missing, because they are cleared each cycle
-					displayMode = DISPLAY_PMFEEDBACK;	
-				}
-				else if (madeRadioContact)
-				{
-					displayMode = DISPLAY_PMCONFIG;
-				}
-				else{
-					displayMode = DISPLAY_RADIO_WARN;
-					if(modeLED & LED_CHARGER) setLEDs(1,2,2); //set red LED
-				}
-
-			}
-			else{
-				displayMode = DISPLAY_BOOT;
-			}
-			
-
 		}
 		if(displayMode)
 		{
+			LOG_INF("Update Display %d", displayMode);
+
+			
+			sprintf(str, "%1c %1c%2d.%1d%1c%1c%1d.%02dV %1d.%02dA",
+						CG_COIL, charWarnCoilTemp, tempCD/10, tempCD%10, CG_DEGREEC, 
+						charWarnCoilV, voltageCD/1000, (voltageCD%1000)/10, 
+						currentCD/1000, (currentCD%1000)/10);
+
 			switch(displayMode)
 			{
-				case DISPLAY_BOOT:
-					// sprintf(str, "coil: %1c%2d.%1dC  %1c%1d.%02dV               %1d.%02dA Leave coil over PM  wait up to %2d s... ",
-					// 	charWarnCoilTemp, tempCD/10, tempCD%10, charWarnCoilV, voltageCD/1000, (voltageCD%1000)/10, 
-					// 	currentCD/1000, (currentCD%1000)/10, TIME_TO_BOOT-timeSince);
-					sprintf(str, "%1c %1c%2d.%1d%1c%1c%1d.%02dV %1d.%02dA"\
-						         " Leave coil         "\
-								 "     over implant.  "\
-								 " Wait up to %2d s... ",
-							CG_COIL, charWarnCoilTemp, tempCD/10, tempCD%10, CG_DEGREEC, 
-							  charWarnCoilV, voltageCD/1000, (voltageCD%1000)/10, 
-							  currentCD/1000, (currentCD%1000)/10, 
-							TIME_TO_BOOT-timeSince);						
+				case DISPLAY_WAITINGFORBOOT:
+					timeSince = (k_uptime_get()-timeCheckStart)/1000;
+					sprintf(&str[20], " Place coil         "\
+								 	  "     over implant!  "\
+								 	  " %2ds remaining...   ", TIME_OUT_APP-timeSince);		
 					break;
-				case DISPLAY_PMCONFIG:
-					sprintf(str, "%1c %1c%2d.%1d%1c%1c%1d.%02dV %1d.%02dA"\
-						         "                    "\
-								 "  Setting           "\
-								 "   implant clock... ",
-						CG_COIL, charWarnCoilTemp, tempCD/10, tempCD%10, CG_DEGREEC, 
-						  charWarnCoilV, voltageCD/1000, (voltageCD%1000)/10, 
-						  currentCD/1000, (currentCD%1000)/10);
+
+				case DISPLAY_BOOT_RADIO_MATCH:
+					if (timeCheckBootloader != 0)	
+					{
+						timeSince = (k_uptime_get()-timeCheckBootloader)/1000;
+						sprintf(&str[20], "                     "\
+										"   Found Implant    "\
+										" Wait up to %2ds...   ", TIME_TO_BOOT-timeSince);		
+					}				
 					break;
+
+				case DISPLAY_BOOT_RADIO_MISMATCH:
+					if (timeCheckBootloader != 0)	
+					{
+						timeSince = (k_uptime_get()-timeCheckBootloader)/1000;
+						sprintf(&str[20], "  Found Implant     "\
+										" (App Radio Changed)    "\
+										" Wait up to %2ds...  ", TIME_TO_BOOT-timeSince);	
+					}
+					break;
+
+				case DISPLAY_SERIAL_REV:
+					sprintf(&str[20], "                    "\
+								 	  "Found PM#%4d v%04d"\
+								 	  "                    ", serialPM, revPM);
+					break;
+				
+				case DISPLAY_SET_CLOCK:
+					sprintf(&str[20], "                    "\
+								 	  "Found PM#%4d v%04d"\   
+								 	  "   Setting clock..    ",	serialPM); //keep PM rev and serial# visible
+					break;
+
 				case DISPLAY_RADIO_WARN:
-					sprintf(str, "%1c %1c%2d.%1d%1c%1c%1d.%02dV %1d.%02dA"\
-								 "                    "\
-								 "   No respnse       "\
-								 "    from implant!   ",
-					CG_COIL, charWarnCoilTemp, tempCD/10, tempCD%10, CG_DEGREEC, 
-					  charWarnCoilV, voltageCD/1000, (voltageCD%1000)/10, 
-					  currentCD/1000, (currentCD%1000)/10);
+					sprintf(&str[20], "                    "\
+								 	  "   No response      "\
+								 	  "    from implant!   ");
 					break;
+
 				case DISPLAY_PMFEEDBACK:
 					setIconRSSI(radioIndicator);
 					setIconVoltage(BavgV);
-					sprintf(str, "%1c %1c%2d.%1d%1c%1c%1d.%02dV %1d.%02dA"\
-						         "%1c %1c%2d.%1d%1c            "\ 
-								 "%1c %1c%2d.%1dV  %3d/%3d   "\
-								 "%1c  %4dmV  %4dmA  %1c", 
-							CG_COIL, charWarnCoilTemp, tempCD/10, tempCD%10,  CG_DEGREEC, 
-							  charWarnCoilV, voltageCD/1000, (voltageCD%1000)/10, 
-							  currentCD/1000, (currentCD%1000)/10,
+					sprintf(&str[20], "%1c %1c%2d.%1d%1c            "\
+								 	"%1c %1c%2d.%1dV  %3d/%3d   "\
+								 	"%1c  %4dmV  %4dmA  %1c", 
 							CG_PERSON, charWarnPMTemp, tempPM/10, tempPM%10, CG_DEGREEC, 
 							CG_LIGHTNING, charWarnCoupling,vrec/10, vrec%10, cmd, disptarg,
 							CG_BATTERY, BavgV, BavgI/10, CG_RADIO);
@@ -2430,14 +2512,11 @@ void charge(void)
 					// 	BavgV, BavgI/10, abs(BavgI%10));
 
 					break;
+
 				case DISPLAY_NO_FEEDBACK:
-					sprintf(str, "%1c %1c%2d.%1d%1c%1c%1d.%02dV %1d.%02dA"\
-								 "     USE CAUTION!   "\
-								 "   Coil ON without  "\
-								 "   implant feedback ",
-						CG_COIL, charWarnCoilTemp, tempCD/10, tempCD%10, CG_DEGREEC, 
-						charWarnCoilV, voltageCD/1000, (voltageCD%1000)/10, 
-						currentCD/1000, (currentCD%1000)/10);
+					sprintf(&str[20], "     USE CAUTION!   "\
+									 "   Coil ON without  "\
+								 	 "   implant feedback ");
 					break;
 			} 
 			OutputDisplay(0, str, "","","",80,0,0,0);
@@ -2450,6 +2529,11 @@ void charge(void)
 		}
 		if(modeLED & LED_CHARGER) setLEDs(2,0,2);  //turn off green LED so it blinks
 		k_msleep(TIME_CYLCE_LED_OFF);
+
+		if (displayMode == DISPLAY_SERIAL_REV || DISPLAY_BOOT_RADIO_MISMATCH)
+		{
+			k_msleep(500); //delay an extra 0.5s to make reading screen easier
+		}
 		
 		if(playsound)
 		{
@@ -2489,10 +2573,19 @@ void charge(void)
 	switch(chargingError)
 	{
 		case CHARGING_ERROR_NONE:
-			OutputDisplay(1, "","       CHARGING        ", "       Stopped      ","",0, 20,20,0);
+			OutputDisplay(1, "","      CHARGING      ", "       Stopped      ","",0, 20,20,0);
 			break;
 		case CHARGING_ERROR_RADIO:
-			OutputDisplay(1, "","       ERROR        ", "Radio Communication ","",0, 20,20,0);
+			OutputDisplay(1, "","       ERROR        ", "   Radio Timed Out  ","",0, 20,20,0);
+			break;
+		case CHARGING_ERROR_STALE:
+			OutputDisplay(1, "","       ERROR        ", " Stale Charging Data","",0, 20,20,0);
+			break;
+		case CHARGING_ERROR_NO_PM:
+			OutputDisplay(1, "","       ERROR        ", "    No PM Found     ","     Use Magnet     ",0, 20,20,20);
+			break;
+		case CHARGING_ERROR_NO_APP:
+			OutputDisplay(1, "","       ERROR        ", "  No PM App Found   ","",0, 20,20,0);
 			break;
 		case CHARGING_ERROR_PMTEMP:
 			OutputDisplay(1, "","       ERROR        ", "  PM Temperature    ","",0, 20,20,0);
@@ -2643,6 +2736,48 @@ void testWriteSDO(void)
 	}
 }
 
+
+
+//returns 0 if fails to read, 1 otherwise
+uint8_t getAppRadioFromPMBoot(uint8_t* addrAP, uint8_t* addrPM, uint8_t* chan, uint8_t* power)
+{
+	int err;
+	struct medRadio_type medRadio;
+	medRadio.len = 1;
+	medRadio.buf[0] = 0x17;
+	medRadio.source = SOURCE_CHARGER;
+	struct cmdHandler_type cmdHandler;
+
+	LOG_HEXDUMP_INF(medRadio.buf, medRadio.len, "TX MedRadio Packet");
+	while(k_msgq_put(&imp_req_msgq, &medRadio, K_NO_WAIT) != 0)
+	{
+		/* message queue is full: purge old data & try again */
+		LOG_INF("Purging MsgQ");
+		k_msgq_purge(&imp_req_msgq);
+	}
+	//wait for a response
+	err = k_msgq_get(&charger_resp_msgq, &cmdHandler, K_MSEC(getTaskTimeoutForMedRadio()));  
+	LOG_HEXDUMP_INF(cmdHandler.buf, cmdHandler.len, "CMDHANDLER resp");
+	if(err == 0 && cmdHandler.len == (7 + NON_PAYLOAD_RESP_BYTES)  && cmdHandler.buf[NON_PAYLOAD_RESP_BYTES + 0] == 0x27)
+	{	
+
+		LOG_INF("****Got Radio Settings");
+		*addrPM = cmdHandler.buf[NON_PAYLOAD_RESP_BYTES + 1];
+		*addrAP = cmdHandler.buf[NON_PAYLOAD_RESP_BYTES + 2];
+		*chan   = cmdHandler.buf[NON_PAYLOAD_RESP_BYTES + 3];
+		*power  = cmdHandler.buf[NON_PAYLOAD_RESP_BYTES + 4];
+		return 1;
+	}
+	else
+	{
+		
+		return 0;
+	}
+
+
+}
+
+//returns 0 if fails to read, otherwise return length of read buffer
 uint8_t ReadSDO(uint8_t node, uint16_t index, uint8_t subindex, uint8_t numSubIndices, uint8_t* resp)
 {
 	uint8_t data[4] = {index & 0xFF, index >> 8,  subindex, numSubIndices};
@@ -2669,6 +2804,7 @@ uint8_t ReadSDO(uint8_t node, uint16_t index, uint8_t subindex, uint8_t numSubIn
 
 }
 
+//returns 0 if fails to read, returns 1 if write successfully acknowledged (PM sends response: 0)
 uint8_t WriteSDO(uint8_t node, uint16_t index, uint8_t subindex, uint8_t numSubIndices, uint8_t* writeData, uint8_t sizeBytes)
 {
 	uint8_t data[54] = {index & 0xFF, index >> 8,  subindex, 0, 
@@ -2705,7 +2841,7 @@ uint8_t WriteSDO(uint8_t node, uint16_t index, uint8_t subindex, uint8_t numSubI
 		protocol = 0xA4;
 	}
 	len = transmit(node, data, sizeBytes+4, 0, protocol, resp); //waits for response or timeout	
-	if(len == 1 || resp[0] == 0)
+	if(len == 1 && resp[0] == 0)
 	{
 		return 1;
 	}	
@@ -2716,7 +2852,7 @@ uint8_t WriteSDO(uint8_t node, uint16_t index, uint8_t subindex, uint8_t numSubI
 }
 
 
-
+//returns 0 if fails to read, returns 1 if write successfully acknowledged (PM echoes cmd)
 uint8_t NMT(uint8_t node, uint8_t cmd, uint8_t param1, uint8_t param2)
 {
 	uint8_t data[7] = {0,0,0,0,0,0,0};
@@ -2728,7 +2864,7 @@ uint8_t NMT(uint8_t node, uint8_t cmd, uint8_t param1, uint8_t param2)
 	data[5] = param1;
 	data[6] = param2;
 	len = transmit(node, data, sizeof(data), 0, 0x34, resp); //waits for response or timeout	
-	if(len == 1 || resp[0] == cmd)
+	if(len == 1 && resp[0] == cmd)
 	{
 		return 1;
 	}
@@ -2738,6 +2874,7 @@ uint8_t NMT(uint8_t node, uint8_t cmd, uint8_t param1, uint8_t param2)
 	}
 }
 
+//returns negative for error, otherwise length of response
 int8_t transmit(uint8_t node, uint8_t* data, uint8_t len, uint8_t counter, uint8_t protocol, uint8_t* resp)
 {
 	struct medRadio_type medRadio;
@@ -2766,7 +2903,7 @@ int8_t transmit(uint8_t node, uint8_t* data, uint8_t len, uint8_t counter, uint8
 		k_msgq_purge(&imp_req_msgq);
 	}
 	//wait for a response
-	err = k_msgq_get(&charger_resp_msgq, &cmdHandler, K_MSEC(200));  //JML Note: timeout here is hard coded and may limit some transactions
+	err = k_msgq_get(&charger_resp_msgq, &cmdHandler, K_MSEC(getTaskTimeoutForMedRadio()));  
 	if(err || cmdHandler.len < NON_PAYLOAD_RESP_BYTES + 2 )
 	{
 		return -1; //no valid response 

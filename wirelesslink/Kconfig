@@ -41,3 +41,5 @@ config BT_NUS_UART_ASYNC_ADAPTER
 	  IRQ interface.
 
 endmenu
+
+rsource "drivers/Kconfig"

@@ -10,6 +10,9 @@
 
 #include <zephyr/logging/log.h>
 
+#include "imu.h"
+
+
 #define LOG_MODULE_NAME cmdhandler
 LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
@@ -29,7 +32,8 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #define WL_ERASE_BONDS              (0x22) //    0         1         returns erasebonds result
 #define WL_RESET                    (0x23) //    0         0            Reset WL
 #define WL_START_PAIRING            (0x1F) //    0         0           Start advertising, allowing new devices
-#define WL_GET_PASSKEY              (0x1E)
+#define WL_GET_PASSKEY              (0x1E) //    0         4           uint32 for 6 digit number
+#define WL_GET_BONDS                (0x1D) //    0         31          Returns number of existing bonds from 0-5, and the 6-byte addresses of up to 5 paired devices
 //These commands allow accelerating long flash read/write commands with PM
 //WL Image is currently only 512 bytes 
 #define WL_WRITE_IMAGE              (0x24) //    4+N       0           Send 4 Address Bytes followed by N (up to 248) bytes to write to WL image
@@ -50,8 +54,8 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #define WL_SET_IMU_ACTION           (0x37) //  Not yet implemented.    Sets the IMU condition and payload that will be sent to implant if condition is met
 #define WL_GET_IMU_ACTION           (0x38) //  Not yet implemented.    Read back for above
 #define WL_SET_IMU_ACTION_TEMP      (0x39) //  Not yet implemented.    temporary version of above (not saved in flash)
-#define WL_GET_IMU_REGISTER         (0x3A) //  Not yet implemented.    Read an IMU register directly (Low Level)
-#define WL_SET_IMU_REGISTER         (0x3B) //  Not yet implemented.    Write an IMU register directly (Low Level)
+#define WL_GET_IMU_ACCEL            (0x3A) //  Not yet implemented.    Read an IMU register directly (Low Level)
+#define WL_GET_IMU_GYRO             (0x3B) //  Not yet implemented.    Write an IMU register directly (Low Level)
 #define WL_SET_LED_MODE             (0x3C) //    1         0           Set one of the predetermined LED modes: BLUE_LED_BLE_ADV=BIT0, GREEN_LED_RADIO_RESPONSE=BIT1, RED_LED_RADIO_ERROR=BIT2, LED_CHARGER=BIT3, LED_MANUAL=BIT6, LED_AUDIO_OFF=BIT7
 #define WL_GET_LED_MODE             (0x3D) //    0         1            Read back for above
 #define WL_SET_LED_MODE_TEMP        (0x3C) //  Not yet implemented. 
@@ -73,8 +77,8 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #define AP_SET_SESSION_TIME         (0x4C) //    1         0           Set time since session lasts (0 to disable Clear Channel Search), 5 for MedRadio protocol
 #define AP_GET_SESSION_TIME_LEFT    (0x4D) //    0         2           Get time since last MedRadio RX 
 #define AP_SET_SESSION_MAINTAIN     (0x4E) //    1         0           1=maintain (if sessiontime>0) 0, don't maintaitn Not yet implemented.    Read back for above
-#define AP_ENCRYPTION               (0x4F) //   1          0           Enable/disable encryption
-
+#define AP_ENCRYPTION               (0x4F) //    1          0          Enable/disable encryption
+#define AP_RESTORE_RADIO            (0x50) //    1          0          0=Bootloader, 1=App
 
 //COIL DRIVE
 #define CD_SET_PERIOD               (0x52) //   4         0           Set coil period in ns (nominally 3.5kHz for NNP)     
@@ -254,7 +258,19 @@ void command_handler_thread(void)
                     response_type = RESP_INVALID_PARAMETERS;
                 }
                 break;
-
+            case WL_GET_BONDS:
+                if(cmd_payload_len == 0)
+                {
+                    response[INDEX_RESP_PAYLOAD] = get_bonded_devices(&response[INDEX_RESP_PAYLOAD+1]);
+                    response_type = RESP_SUCCESS;
+                    response_len = NON_PAYLOAD_RESP_BYTES + 31;
+                }
+                else
+                {
+                    response_len = NON_PAYLOAD_RESP_BYTES;
+                    response_type = RESP_INVALID_PARAMETERS;
+                }
+                break;
             case WL_ERASE_BONDS:
                 if(cmd_payload_len == 0)
                 {
@@ -526,6 +542,27 @@ void command_handler_thread(void)
                 }
                 break;
 
+             case AP_RESTORE_RADIO:
+                if(cmd_payload_len == 1 )
+                {
+                    if(cmdhandler.buf[INDEX_CMD_PAYLOAD]==0){
+                        //switch to fixed PM bootloader settings
+                        loadRadioSettingsForPMBoot();
+                    }
+                    else {
+                        //load app settings from flash
+                        loadRadioSettingsFromFlash();
+                    }
+                    response_len = NON_PAYLOAD_RESP_BYTES;
+                    response_type = RESP_SUCCESS;
+                }
+                else
+                {
+                    response_len = NON_PAYLOAD_RESP_BYTES;
+                    response_type = RESP_INVALID_PARAMETERS;   
+                }
+                break;
+
             case WL_SET_IMU_MODE:
                 if(cmd_payload_len == 1 )
                 {
@@ -692,11 +729,11 @@ void command_handler_thread(void)
             case WL_BLE_GET_ADC:
                 if(cmd_payload_len == 0 )
                 {
-                    int val= get_adc_sample();
+                    result = get_adc_sample();
                     response_len = NON_PAYLOAD_RESP_BYTES + 2;
                     response_type = RESP_SUCCESS;
-                    response[INDEX_RESP_PAYLOAD + 0] = (uint8_t)((uint16_t) val);
-                    response[INDEX_RESP_PAYLOAD + 1] = (uint8_t)(((uint16_t) val)>>8);
+                    response[INDEX_RESP_PAYLOAD + 0] = (uint8_t)(result);
+                    response[INDEX_RESP_PAYLOAD + 1] = (uint8_t)(result>>8);
                 }
                 else
                 {
@@ -1125,6 +1162,33 @@ void command_handler_thread(void)
 
             case TEST_NMT:
                 testNMT();
+                break;
+
+            case WL_GET_IMU_ACCEL:
+                if(cmd_payload_len == 0) 
+                {
+                    response_len = NON_PAYLOAD_RESP_BYTES + 6;
+                    response_type = RESP_SUCCESS;
+                    getAccel(&response[INDEX_RESP_PAYLOAD]);
+                }
+                else
+                {
+                    response_len = NON_PAYLOAD_RESP_BYTES;
+                    response_type = RESP_INVALID_PARAMETERS;
+                }
+                break;
+            case WL_GET_IMU_GYRO:
+                if(cmd_payload_len == 0) 
+                {
+                    response_len = NON_PAYLOAD_RESP_BYTES + 6;
+                    response_type = RESP_SUCCESS;
+                    getGyro(&response[INDEX_RESP_PAYLOAD]);
+                }
+                else
+                {
+                    response_len = NON_PAYLOAD_RESP_BYTES;
+                    response_type = RESP_INVALID_PARAMETERS;
+                }
                 break;
         }
 
