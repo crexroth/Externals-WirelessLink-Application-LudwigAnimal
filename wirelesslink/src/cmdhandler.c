@@ -1585,16 +1585,18 @@ uint8_t pmfile_read_supervisor(uint8_t * pmfile, uint8_t * resp, uint8_t resp_le
 K_THREAD_DEFINE(command_handler_thread_id, CMD_STACKSIZE, command_handler_thread, NULL, NULL, NULL, CMD_PRIORITY, 0, 0);
 
 void resetWL(void){
-    // errata - Tested this workaround. Be aware of the register address:
-    // - 0x50005000 for secure firmware
-    // - 0x40005000 for non-secure firmware
-    *(volatile uint32_t *) 0x40005618ul = 1ul;
-    NRF_RESET->NETWORK.FORCEOFF = (RESET_NETWORK_FORCEOFF_FORCEOFF_Release << RESET_NETWORK_FORCEOFF_FORCEOFF_Pos);
-    k_msleep(5); // Wait for at least five microseconds
-    NRF_RESET->NETWORK.FORCEOFF = (RESET_NETWORK_FORCEOFF_FORCEOFF_Hold << RESET_NETWORK_FORCEOFF_FORCEOFF_Pos);
-    k_msleep(1); // Wait for at least one microsecond
-    NRF_RESET->NETWORK.FORCEOFF = (RESET_NETWORK_FORCEOFF_FORCEOFF_Release << RESET_NETWORK_FORCEOFF_FORCEOFF_Pos);
-    *(volatile uint32_t *) 0x40005618ul = 0ul;
+    NVIC_SystemReset();
+
+    // // errata - Tested this workaround. Be aware of the register address:
+    // // - 0x50005000 for secure firmware
+    // // - 0x40005000 for non-secure firmware
+    // *(volatile uint32_t *) 0x40005618ul = 1ul;
+    // NRF_RESET->NETWORK.FORCEOFF = (RESET_NETWORK_FORCEOFF_FORCEOFF_Release << RESET_NETWORK_FORCEOFF_FORCEOFF_Pos);
+    // k_msleep(5); // Wait for at least five microseconds
+    // NRF_RESET->NETWORK.FORCEOFF = (RESET_NETWORK_FORCEOFF_FORCEOFF_Hold << RESET_NETWORK_FORCEOFF_FORCEOFF_Pos);
+    // k_msleep(1); // Wait for at least one microsecond
+    // NRF_RESET->NETWORK.FORCEOFF = (RESET_NETWORK_FORCEOFF_FORCEOFF_Release << RESET_NETWORK_FORCEOFF_FORCEOFF_Pos);
+    // *(volatile uint32_t *) 0x40005618ul = 0ul;
 }
 
 void purge_msg_queues(void){

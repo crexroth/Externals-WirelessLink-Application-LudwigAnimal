@@ -137,6 +137,9 @@ New firmware can be uploaded to the Wireless Link without using the JTAG link
 * Buttons can be programmed to perfrom any API function, short press, long press
 * If nothing programmed, default long press function on both buttons is to enter sleep state
 * While in sleep state, either button will wake  
+* SW1 (SC:orange, WL:nRF side) extra long press (10s) resets device.  If SW2 is held down after SW1 (and is still held), device will enter serial recovery (see above)
+* SW2 (SC:blue, WL:Anaren side) extra long press (10s) starts BLE pairing mode.  If SW1 is held down afetr SW2 (and is still held), device will delete existing bonds 
+* Note that the shortpress action occurs on button release whereas longpress actions occur once the button has been held for long enough (2s) and do not require releasing the button. Therefore SW1 and SW2 longpress actions will occur prior to the extralongpress actions
 
 ## Wireless Link Mode
 * Blue LED blinking - indicates BLE advertising
@@ -192,8 +195,8 @@ multiple bytes are presented Little Endian
 |WL_START_PAIRING            |0x1F|     0   |    1        | Returns start_pairing_mode result |
 |WL_GET_PASSKEY              |0x1E|     0   |      4      | Returns 4-digit passcode to enter into host for pairing|
 |These commands allow accelerating long flash read/write commands with PM. WL Image is currently only 512 bytes| | | | |
-|WL_WRITE_IMAGE              |0x24|    4+N  |    0        |  Send 4 Address Bytes followed by N (up to 248) bytes to write to WL image                 |
-|WL_READ_IMAGE               |0x25|    5    |    N        |  Send 4 Address Bytes and N (up to 252).  Returns N bytes of WL inage starting from addr   |
+|WL_WRITE_IMAGE              |0x24|    4+N  |    0        |  Send 4 Address Bytes followed by N (up to 248 over USB, 237 over BLE) bytes to write to WL image                 |
+|WL_READ_IMAGE               |0x25|    5    |    N        |  Send 4 Address Bytes and N (up to 252 over USB, 241 over BLE).  Returns N bytes of WL inage starting from addr   |
 |WL_PMBOOT_WRITE             |0x26|    7    |    0        |  Send 4 addr bytes + 2 pgsize bytes + 1 sector byte.  Copies WL image to PM flash          |
 |WL_PMBOOT_READ              |0x27|    6    |    0        |  Send 4 addr bytes + 2 size bytes.  Copies PM flash to WL image                            |
 |WL_PMFILE_READ              |0x28|    7    |    0        |  Send 4 addr bytes + 2 size bytes + 1 file byte.  Copies PM file data to WL image          |
@@ -234,6 +237,7 @@ multiple bytes are presented Little Endian
 |AP_GET_SESSION_TIME_LEFT    |0x4D|   0     |   2         | Get time since last MedRadio RX 
 |AP_SET_SESSION_MAINTAIN     |0x4E|   1     |   0         | 1=maintain (if sessiontime>0) 0, don't maintaitn Not yet implemented.    Read back for above
 |AP_ENCRYPTION               |0x4F|  1      |   0         | Enable/disable encryption
+|AP_RESTORE_RADIO            |0x50|  1      |    0        |  0=Bootloader, 1=App (from flash)
 |                            |    |         |             |     |
 |**CHARGER**                 |    |         |             |     |
 |CD_SET_PERIOD               |0x52|    4    |    0        |  Set coil period in ns (nominally 3.5kHz for NNP)     

@@ -155,10 +155,14 @@ UART_ASYNC_ADAPTER_INST_DEFINE(async_adapter);
 #define RX_BUF_SIZE 256
 #define TX_BUF_SIZE 256
 
+#define EXTRALONG_BUTTON_PUSH 10000  //in ms
+#define LONG_BUTTON_PUSH      2000   //in ms 
+
 
 uint8_t rx_buf[RX_BUF_SIZE] = {0};
 uint8_t tx_buf[TX_BUF_SIZE] = {0};
 
+static bool button1_held = false;
 static bool pairing_mode = false;
 static bool isAdvertising = false;
 static bool isReady = false;
@@ -352,9 +356,64 @@ uint8_t get_bonded_devices(uint8_t *buf)
 	return (uint8_t) num_bonds;
 }
 
+//we can't use delays in functions ghere because they are called by ISRs, so we use the cmdhandler mechanism to initiate the actions by message queue
+void btn1_extralongpress_action(struct k_timer *dummy)
+{
+	struct cmdHandler_type cmdHandler; 
 
+	//if button2 is also held down (after button1), then device will enter serial recovery when it comes out of reset
+	LOG_INF("Button1 extra long press: reset WL");
+	cmdHandler.len = 3;
+	cmdHandler.route = ROUTE_LOCAL;
+	cmdHandler.buf[0] = 0xFF;
+	cmdHandler.buf[1] = 0x23; //reset WL
+	cmdHandler.buf[2] = cmdHandler.len;
+	while(k_msgq_put(&cmd_req_msgq, &cmdHandler, K_NO_WAIT) != 0)
+	{
+		/* message queue is full: purge old data & try again */
+		LOG_INF("Purging CmdReq MsgQ");
+		k_msgq_purge(&cmd_req_msgq);
+	}
 
+}
 
+void btn2_extralongpress_action(struct k_timer *dummy)
+{
+	struct cmdHandler_type cmdHandler; 
+
+	//if button1 is also held down (after button2), then device will erase bonds 
+	if(button1_held)
+	{
+		LOG_INF("Button2 extra long press with Button1: delete bonds");
+		cmdHandler.len = 3;
+		cmdHandler.route = ROUTE_LOCAL;
+		cmdHandler.buf[0] = 0xFF;
+		cmdHandler.buf[1] = 0x22; //delete bonds
+		cmdHandler.buf[2] = cmdHandler.len;
+		while(k_msgq_put(&cmd_req_msgq, &cmdHandler, K_NO_WAIT) != 0)
+		{
+			/* message queue is full: purge old data & try again */
+			LOG_INF("Purging CmdReq MsgQ");
+			k_msgq_purge(&cmd_req_msgq);
+		}
+	}
+	else
+	{
+		LOG_INF("Button2 extra long press: enable pairing");
+	
+		cmdHandler.len = 3;
+		cmdHandler.route = ROUTE_LOCAL;
+		cmdHandler.buf[0] = 0xFF;
+		cmdHandler.buf[1] = 0x1F; //start open pairing mode
+		cmdHandler.buf[2] = cmdHandler.len;
+		while(k_msgq_put(&cmd_req_msgq, &cmdHandler, K_NO_WAIT) != 0)
+		{
+			/* message queue is full: purge old data & try again */
+			LOG_INF("Purging CmdReq MsgQ");
+			k_msgq_purge(&cmd_req_msgq);
+		}
+	}
+}
 
 
 void btn1_longpress_action(struct k_timer *dummy)
@@ -406,6 +465,8 @@ void btn2_longpress_action(struct k_timer *dummy)
 	}
 }
 
+K_TIMER_DEFINE(btn1_timer_extra, btn1_extralongpress_action, NULL);
+K_TIMER_DEFINE(btn2_timer_extra, btn2_extralongpress_action, NULL);
 K_TIMER_DEFINE(btn1_timer, btn1_longpress_action, NULL);
 K_TIMER_DEFINE(btn2_timer, btn2_longpress_action, NULL);
 
@@ -1061,13 +1122,16 @@ void button_changed(uint32_t button_state, uint32_t has_changed)
 	// #endif /* CONFIG_BT_NUS_SECURITY_ENABLED */
 
 	if (buttonsOn & DK_BTN1_MSK ){
-		k_timer_start(&btn1_timer, K_MSEC(2000), K_NO_WAIT);
+		k_timer_start(&btn1_timer, K_MSEC(LONG_BUTTON_PUSH), K_NO_WAIT);
+		k_timer_start(&btn1_timer_extra, K_MSEC(EXTRALONG_BUTTON_PUSH), K_NO_WAIT);
 		//longPress1Start = k_uptime_get_32();
 		//LOG_INF("Button1 press started %08X", longPress1Start);
+		button1_held = true;
 	}
 
 	if (buttonsOn & DK_BTN2_MSK ){
-		k_timer_start(&btn2_timer, K_MSEC(2000), K_NO_WAIT);
+		k_timer_start(&btn2_timer, K_MSEC(LONG_BUTTON_PUSH), K_NO_WAIT);
+		k_timer_start(&btn2_timer_extra, K_MSEC(EXTRALONG_BUTTON_PUSH), K_NO_WAIT);
 		//longPress2Start = k_uptime_get_32();
 		//LOG_INF("Button2 press started %08X", longPress2Start);
 	}
@@ -1075,10 +1139,12 @@ void button_changed(uint32_t button_state, uint32_t has_changed)
 
 	if (buttonsOff & DK_BTN1_MSK ){ 
 		
+		button1_held = false;
 		if(k_timer_status_get(&btn1_timer)==0)
 		{
 			//long press timer has not elapsed
 			k_timer_stop(&btn1_timer); //stop the timer to prevent long press action
+			k_timer_stop(&btn1_timer_extra); //stop the timer to prevent long press action
 			LOG_INF("Button1 short press release");
 		
 			if(action[BUTTON_1_SHORT].len > 0){
@@ -1098,6 +1164,7 @@ void button_changed(uint32_t button_state, uint32_t has_changed)
 		{
 			//long press timer has not elapsed
 			k_timer_stop(&btn2_timer);
+			k_timer_stop(&btn2_timer_extra);
 			LOG_INF("Button2 short press release");
 		
 			if(action[BUTTON_2_SHORT].len > 0){
