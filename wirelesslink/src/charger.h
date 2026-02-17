@@ -22,6 +22,18 @@ void coil_reqresp_thread(void);
 #define ROUTE_BIT_PMSCRIPT_READ  0x10
 #define ROUTE_BIT_PMFILE_READ    0x08
 
+#define CHARGER_MODE_NONE	0
+#define CHARGER_MODE_CLOCK	1
+#define CHARGER_MODE_CHARGE	2
+#define CHARGER_MODE_TUNE	3
+#define CHARGER_MODE_DETECT	4
+#define CHARGER_MODE_POWERDOWN	5
+#define CHARGER_MODE_CHARGE_NOFEEDBACK	6
+#define CHARGER_MODE_DISPLAY_PASSKEY	7
+#define CHARGER_MODE_DISPLAY_ERASEBONDS	8
+#define CHARGER_MODE_MAX    8  
+#define CHARGER_MODE_DEFAULT CHARGER_MODE_CLOCK
+
 extern struct k_msgq coil_resp_msgq;
 extern struct k_msgq coil_req_msgq;
 
@@ -82,7 +94,6 @@ int8_t transmit(uint8_t node, uint8_t* data, uint8_t len, uint8_t counter, uint8
 uint8_t getChargerParams(uint8_t* settings);
 void setChargerParams(uint8_t* settings);
 uint8_t getAppRadioFromPMBoot(uint8_t* addrAP, uint8_t* addrPM, uint8_t* chan, uint8_t* power);
-void displayPairingKey(void);
 
 #endif
 

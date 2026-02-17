@@ -891,7 +891,9 @@ bool OutputDisplayLine(uint8_t line, char* str, uint8_t len)
 
 //8 custom characters available
 #define CG_RADIO     0
+#define CG_BT		 0
 #define CG_BATTERY   1
+#define CG_BTPAIR	 1
 #define CG_DEGREEC   2
 #define CG_TUNER     2
 #define CG_PERSON    3
@@ -903,23 +905,28 @@ bool OutputDisplayLine(uint8_t line, char* str, uint8_t len)
 #define CG_LILSTAR   7
 #define CG_NUM		 8
 
+#define CG_BLANK 	0b00100000 
+#define CG_MUSIC    0b10010000 
+#define CG_TRIANGLE 0b00010000 
+
 static uint8_t customCharCharge[8][8] = {CUSTOMCHAR_RADIO0, 
 						   CUSTOMCHAR_BATTERY0,
 						   CUSTOMCHAR_DEGREEC, 
 						   CUSTOMCHAR_PERSON, 
 						   CUSTOMCHAR_LIGHTNING,
 						   CUSTOMCHAR_COIL,
-						   CUSTOMCHAR_BIGSTAR,
-						   CUSTOMCHAR_LILSTAR	}; 
+						   CUSTOMCHAR_BIGSTAR,      //not currently used on this screen
+						   CUSTOMCHAR_LILSTAR	};  //not currently used on this screen
 
-static uint8_t customCharMenu[8][8] = {CUSTOMCHAR_RADIO0, 
-							CUSTOMCHAR_BATTERY0,
+static uint8_t customCharMenu[8][8] = {CUSTOMCHAR_BT, 
+							CUSTOMCHAR_BTPAIR, 
 							CUSTOMCHAR_TUNER,
 							CUSTOMCHAR_POWER,
 							CUSTOMCHAR_LIGHTNING,
 							CUSTOMCHAR_DOUBLEI, 
 							CUSTOMCHAR_BIGSTAR, 
-							CUSTOMCHAR_LILSTAR}; 						   
+							CUSTOMCHAR_LILSTAR}; 		
+
 
 static const uint8_t customCharRadio[4][8] = { CUSTOMCHAR_RADIO0,
 										CUSTOMCHAR_RADIO1, 
@@ -946,6 +953,7 @@ void setMenuIcons()
 		}
 	}
 }
+
 
 void setChargerIcons()
 {
@@ -1031,16 +1039,7 @@ void initDisplay(void)
 }
 
 
-#define CHARGER_MODE_NONE	0
-#define CHARGER_MODE_CLOCK	1
-#define CHARGER_MODE_CHARGE	2
-#define CHARGER_MODE_TUNE	3
-#define CHARGER_MODE_DETECT	4
-#define CHARGER_MODE_POWERDOWN	5
-#define CHARGER_MODE_CHARGE_NOFEEDBACK	6
-#define CHARGER_MODE_DISPLAY_BLE	7
-#define CHARGER_MODE_MAX    7
-#define CHARGER_MODE_DEFAULT CHARGER_MODE_CLOCK
+
 
 static uint8_t chargerMode = CHARGER_MODE_DEFAULT; //Only the setChargeMode function should set this variable
 
@@ -1072,7 +1071,9 @@ void charger_thread(void)
 	char str[80];
 	uint8_t cnt;
 	uint8_t rtc[7] = {0,0,0,0,0,0,0}; //sec, min, hour, weekday, day, month, year 
-
+	static uint8_t previousMode = 0;
+	uint8_t currentMode = 0;
+	//static uint8_t bondcount = 0;
 
 	char chardayofweek1[7]	= {'S', 'M', 'T', 'W', 'T', 'F', 'S'};
 	char chardayofweek2[7]	= {'u', 'o', 'u', 'e', 'h', 'r', 'a'};
@@ -1121,6 +1122,7 @@ void charger_thread(void)
 
 	for(;;)
 	{
+		//LOG_INF("ChargerMode %d", chargerMode);
 		//each option in this loop must have a sleep that allows the change in chargerMode to be handled
 		//the sleep time should be < 1s such that button presses likely trigger a change do not have a 
 		//long latency before change takes effect
@@ -1134,26 +1136,65 @@ void charger_thread(void)
 						"  %1c    COSM%1cC    %1c  "\
 						" Smart Charger v%03d "\
 						"                    ",
-						CG_LIGHTNING, CG_BIGSTAR, CG_LILSTAR, 0b10010000, 
+						CG_LIGHTNING, CG_BIGSTAR, CG_LILSTAR, CG_MUSIC,
 						CG_POWER, CG_DOUBLEI, CG_TUNER,
 						 SW_REV );
 			OutputDisplay(1, str,"","","",80,0,0,0 );
 
 			while(chargerMode == CHARGER_MODE_CLOCK)
 			{
+				//LOG_INF("ChargerMode Clock Loop");
 				readRTC(rtc);
-				//sprintf(str, "%1c%1c,%02X/%02X/%02X,%02X:%02X:%02X ", 
-						//chardayofweek1[rtc[3]-1],
-						//chardayofweek2[rtc[3]-1],
+
+
 				sprintf(str, " %02X/%02X/%02X  %02X:%02X:%02X ", 
-						rtc[5], /*month*/
-						rtc[4], /*date*/
-						rtc[6], /*year*/
-						rtc[2], /*hour*/
-						rtc[1], /*minute*/
-						rtc[0] /*second*/ );
+								rtc[5], /*month*/
+								rtc[4], /*date*/
+								rtc[6], /*year*/
+								rtc[2], /*hour*/
+								rtc[1], /*minute*/
+								rtc[0] /*second*/ );
 				OutputDisplayLine(4, str, 20 );
-				k_msleep(1000);
+
+				currentMode = getBLEMode();
+				if(currentMode == BLE_MODE_READY)
+				{ 
+					if(previousMode != BLE_MODE_READY)
+					{
+						//add bluetooth symbol only if we haven't done it yet
+						sprintf(str,"  %1c     %1c %1c%1c     %1c  ",	CG_LIGHTNING, CG_BT, CG_BIGSTAR, CG_LILSTAR, CG_MUSIC);
+						OutputDisplayLine(1, str, 20 );
+					}
+					k_msleep(1000);
+				}
+				else if(currentMode == BLE_MODE_ADVERT || currentMode == BLE_MODE_OPEN_ADVERT)
+				{	
+					sprintf(str,"  %1c     %1c %1c%1c     %1c  ",	CG_LIGHTNING, CG_BT, CG_BIGSTAR, CG_LILSTAR, CG_MUSIC);
+					OutputDisplayLine(1, str, 20 );
+					if(currentMode == BLE_MODE_ADVERT){
+						k_msleep(500);
+					} else {
+						k_msleep(100); //blink fast for open advertising (pairing)
+					}
+					sprintf(str,"  %1c       %1c%1c     %1c  ", CG_LIGHTNING, CG_BIGSTAR, CG_LILSTAR, CG_MUSIC);
+					OutputDisplayLine(1, str, 20 );
+					if(currentMode == BLE_MODE_ADVERT){
+						k_msleep(500);
+					} else {
+						k_msleep(100); //blink fast for open advertising (pairing)
+					}
+				} 
+				else if(previousMode == BLE_MODE_READY)
+				{ 
+					//remove bluetooth symbol only if we haven't done it yet
+					sprintf(str,"  %1c       %1c%1c     %1c  ",	CG_LIGHTNING, CG_BIGSTAR, CG_LILSTAR, CG_MUSIC);
+					OutputDisplayLine(1, str, 20 );
+					k_msleep(1000);
+				}
+				else {
+					k_msleep(1000);
+				}
+				previousMode = currentMode;
 			}
 			
 		}
@@ -1174,7 +1215,7 @@ void charger_thread(void)
 			setChargeMode(CHARGER_MODE_NONE);
 			OutputDisplay(1, "","     TUNE COIL?     ","  Long Press again  ","     to confirm     ",0,20,20,0 );
 			cnt = 0;
-			while(chargerMode == CHARGER_MODE_NONE && cnt++ < 5)
+			while(chargerMode == CHARGER_MODE_NONE && cnt++ < 5) //wait up to 5s for completion of follow up long press
 			{
 				k_msleep(1000);
 			}
@@ -1187,9 +1228,9 @@ void charger_thread(void)
 		else if (chargerMode == CHARGER_MODE_POWERDOWN)
 		{
 			setChargeMode(CHARGER_MODE_NONE);
-			OutputDisplay(1, "","    POWER DOWN?     ","  Long Press again  ","     to confirm     ",0,20,20,0 );
+			OutputDisplay(1, ""," POWER DOWN IMPLANT?","  Long Press again  ","     to confirm     ",0,20,20,0 );
 			cnt = 0;
-			while(chargerMode == CHARGER_MODE_NONE && cnt++ < 5)
+			while(chargerMode == CHARGER_MODE_NONE && cnt++ < 5) //wait up to 5s for completion of follow up long press
 			{
 				k_msleep(1000);
 			}
@@ -1199,20 +1240,32 @@ void charger_thread(void)
 			}
 			setChargeMode(CHARGER_MODE_DEFAULT);
 		}
-		else if (chargerMode == CHARGER_MODE_DISPLAY_BLE)
+		else if (chargerMode == CHARGER_MODE_DISPLAY_PASSKEY)
 		{
 			sprintf(str, "(#%1d) passkey:%06d ", get_bonded_devices(NULL)+1, getpasskey());		
-			OutputDisplayLine(4,str,20);
+			//sprintf(str, "    passkey:%06d    ", getpasskey());		
+			OutputDisplayLine(4,str,20);	
 
-			k_msleep(10000);
+			//wait until pairing completed, failed, or cancelled
+			while(getpasskey()!=0)
+			{
+				k_msleep(1000);
+			}
+			setChargeMode(CHARGER_MODE_DEFAULT);
+			
+		}
+		else if (chargerMode == CHARGER_MODE_DISPLAY_ERASEBONDS)
+		{	
+			sprintf(str, " Pairing Data Erased");		
+			OutputDisplayLine(4,str,20);	
+			k_msleep(1000);
+			k_msleep(1000);
 			setChargeMode(CHARGER_MODE_DEFAULT);
 		}
 		else
 		{
 			k_msleep(1000);
-		}
-
-		
+		}	
 		
 	}
 
@@ -1692,7 +1745,7 @@ void setChargerParams(uint8_t* params)
 
 
 #define MAX_SYSTEM_CURRENT  2500 //in mA (sytem has 3A fuse)
-#define MAX_COILDRIVE_CURRENT 5000 //in mA 
+#define MAX_COILDRIVE_CURRENT 3500 //in mA                    8V*3.5A = 28W < 30W = 12V*2.5A
 
 #define COIL_OPEN_TEMP	100
 #define COIL_GOOD_TEMP	400
@@ -1710,7 +1763,7 @@ void setChargerParams(uint8_t* params)
 #define TARGET_MIN      20
 
 #define TIME_OUT_APP       60 //in s  (max time to get into app mode, coil at 5V )
-#define TIME_OUT_RADIO     10 //in s  (max time between successful radio commands, coil may be higher)
+#define TIME_OUT_RADIO     20 //in s  (max time between successful radio commands, coil may be higher)
 #define TIME_BOOT_TO_APP    2 //in s  (time to get between boot and app...radio commands expected to fail)
 #define TIME_OUT_COUPLING  120 //in s (max time with insufficient coupling (charging command = 0))
 #define TIME_OUT_COILTEMP   5 //in s  (max time with invalid external coil temperature)
@@ -1726,8 +1779,9 @@ void setChargerParams(uint8_t* params)
 #define CHARGING_ERROR_PMTEMP       5
 #define CHARGING_ERROR_PMTEMP_OPEN  6
 #define CHARGING_ERROR_CHARGERTEMP  7
-#define CHARGING_ERROR_COILTEMP1    8
-#define CHARGING_ERROR_COILTEMP2    9
+#define CHARGING_ERROR_CHARGERTEMP_OPEN  8
+// #define CHARGING_ERROR_COILTEMP1    8
+// #define CHARGING_ERROR_COILTEMP2    9
 #define CHARGING_ERROR_COUPLING     10
 #define CHARGING_ERROR_SYSCURRENT   11
 #define CHARGING_ERROR_CDCURRENT    12
@@ -1932,10 +1986,10 @@ void charge(void)
 		radioIndicator = 0;
 		readRTC(rtc); //read the realtime clock in order to set PM time and for logging
 
-		charWarnCoilTemp=0x20; //space
-	    charWarnPMTemp=0x20;
-	    charWarnCoupling=0x20;
-		charWarnCoilV=0x20;
+		charWarnCoilTemp = CG_BLANK; //space
+	    charWarnPMTemp   = CG_BLANK;
+	    charWarnCoupling = CG_BLANK;
+		charWarnCoilV    = CG_BLANK;
 
 		if(modeLED & LED_CHARGER) setLEDs(0,1,0);  //set green LED to indicate coil is on, reset warn/error LED
 		timeCycle = k_uptime_get();
@@ -1994,7 +2048,7 @@ void charge(void)
 			LOG_INF("Failed to get CD Thermistor");
 			if((k_uptime_get()-timeCheckCoil)/1000 >= TIME_OUT_COILTEMP)
 			{
-				chargingError = CHARGING_ERROR_CHARGERTEMP;
+				chargingError = CHARGING_ERROR_CHARGERTEMP_OPEN;
 				break;
 			}
 			
@@ -2291,7 +2345,7 @@ void charge(void)
 					{
 						if ((k_uptime_get()-timeCheckCoupling)/1000 > TIME_WARN_COUPLING )
 						{
-							charWarnCoupling=0x10;
+							charWarnCoupling = CG_TRIANGLE;
 
 							if(modeLED & LED_CHARGER) setLEDs(2,2,1); //Set Warn LED
 							if(status == COUPLED)
@@ -2337,11 +2391,11 @@ void charge(void)
 						if(modeLED & LED_CHARGER) setLEDs(2,2,1); //Set warn LED and warn indication for LCD
 						if(tempPM >= PM_WARN_TEMP)
 						{
-							charWarnPMTemp=0x10;
+							charWarnPMTemp = CG_TRIANGLE;
 						}
 						if(tempCD >= COIL_WARN_TEMP)
 						{
-							charWarnCoilTemp=0x10;	
+							charWarnCoilTemp = CG_TRIANGLE;	
 						}
 						//reduce coil voltage if VREC is above the No Charge Threshold
 						if (vrec >= VREC_MIN_STEADY && voltageSetting > minVoltageSetting)
@@ -2391,18 +2445,18 @@ void charge(void)
 							else //Temperature is not sufficiently low to step up coil voltage, or coil voltage is already at maximum
 							{
 								if(modeLED & LED_CHARGER) setLEDs(2,2,1); //Set warn LED
-								charWarnCoupling=0x10;
+								charWarnCoupling = CG_TRIANGLE;
 								if(tempPM > PM_GOOD_TEMP)
 								{
-									charWarnPMTemp=0x10;
+									charWarnPMTemp = CG_TRIANGLE;
 								}
 								if(tempCD > COIL_GOOD_TEMP)
 								{
-									charWarnCoilTemp=0x10;	
+									charWarnCoilTemp = CG_TRIANGLE;	
 								}
 								if(voltageSetting >= maxVoltageSetting)
 								{
-									charWarnCoilV = 0x10;	
+									charWarnCoilV = CG_TRIANGLE;	
 								}
 							}
 						}
@@ -2617,7 +2671,7 @@ void charge(void)
 			OutputDisplay(1, "","       ERROR        ", " Stale Charging Data","",0, 20,20,0);
 			break;
 		case CHARGING_ERROR_NO_PM:
-			OutputDisplay(1, "","       ERROR        ", "    No PM Found     ","     Use Magnet     ",0, 20,20,20);
+			OutputDisplay(1, "","       ERROR        ", "     No PM Found    ","",0, 20,20,0);
 			break;
 		case CHARGING_ERROR_NO_APP:
 			OutputDisplay(1, "","       ERROR        ", "  No PM App Found   ","",0, 20,20,0);
@@ -2627,6 +2681,9 @@ void charge(void)
 			break;
 		case CHARGING_ERROR_CHARGERTEMP:
 			OutputDisplay(1, "","       ERROR        ", "  Coil Temperature  ","",0, 20,20,0);
+			break;
+		case CHARGING_ERROR_CHARGERTEMP_OPEN:
+			OutputDisplay(1, "","       ERROR        ", "   Coil Temp Open   ","",0, 20,20,0);
 			break;
 		case CHARGING_ERROR_PMTEMP_OPEN:
 			OutputDisplay(1, "","       ERROR        ", "    PM Temp Open    ","",0, 20,20,0);
@@ -2967,7 +3024,5 @@ int8_t transmit(uint8_t node, uint8_t* data, uint8_t len, uint8_t counter, uint8
 
 }
 
-void displayPairingKey(void)
-{
-	setChargeMode(CHARGER_MODE_DISPLAY_BLE);
-}
+
+

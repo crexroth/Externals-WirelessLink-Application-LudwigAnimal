@@ -8,7 +8,7 @@
 
 #define WL_IN_CHARGER true
 #define HW_REV 1 //up to 65535
-#define SW_REV 11 //up to 65535
+#define SW_REV 13 //up to 65535
 
 #define PKT_HEADER_LEN 3
 #define MIN_PKT_LEN PKT_HEADER_LEN // when checksum added, this will change
@@ -113,6 +113,11 @@ extern uint8_t modeLED;
 #define INDEX_CMD_PAYLOAD     3
 #define NON_PAYLOAD_CMD_BYTES 3
 
+#define BLE_MODE_READY       3
+#define BLE_MODE_OPEN_ADVERT 2
+#define BLE_MODE_ADVERT      1
+#define BLE_MODE_NONE        0
+
 #define SYNC_BYTE  0xFF
 
 #define MSG_DEPTH 1
@@ -143,4 +148,5 @@ void ble_start_advertising_pairing_mode(void);
 uint32_t getpasskey(void);
 uint8_t get_bonded_devices(uint8_t *buf);
 
+uint8_t getBLEMode(void);
 #endif

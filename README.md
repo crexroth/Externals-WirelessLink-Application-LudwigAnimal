@@ -141,14 +141,14 @@ New firmware can be uploaded to the Wireless Link without using the JTAG link
 * SW2 (SC:blue, WL:Anaren side) extra long press (10s) starts BLE pairing mode.  If SW1 is held down afetr SW2 (and is still held), device will delete existing bonds 
 * Note that the shortpress action occurs on button release whereas longpress actions occur once the button has been held for long enough (2s) and do not require releasing the button. Therefore SW1 and SW2 longpress actions will occur prior to the extralongpress actions
 
-## Wireless Link Mode
+## LEDs - Wireless Link Mode
 * Blue LED blinking - indicates BLE advertising
 * Ble LED solid - BLE connected
 * Green LED solid - Serial recovery mode
 * Green blink - MedRadio Response received
 * Red blink - MedRadio Response timeout or bad packet
 
-## Charger Mode
+## LEDs - Charger Mode
 * Red LED - Error
 * Green LED blinking - Charging Implant
 * Green LED solid - Implant fully charged

@@ -168,6 +168,12 @@ static bool isAdvertising = false;
 static bool isReady = false;
 static uint8_t bond_addr_list[CONFIG_BT_MAX_PAIRED][BT_ADDR_SIZE] = {0};
 
+static bool allowEnterLowPower = true;
+static bool allowExtraLongPress1 = true;
+static bool allowExtraLongPress2 = true;
+
+void uiPairingPasskey(void);
+void uiEraseBonds(void);
 
 //See BT Fundamental Lesson 2, Ex 3
 static void exchange_func(struct bt_conn *conn, uint8_t att_err, struct bt_gatt_exchange_params *params);
@@ -217,6 +223,7 @@ uint8_t erasebonds(void)
 	if (err) {
 		LOG_INF("Cannot delete bond (err: %d)\n", err);
 	} else	{
+		uiEraseBonds();
 		LOG_INF("Bond deleted succesfully \n");
 	}	
 	return err;
@@ -321,6 +328,22 @@ static void start_adv_work_handler(struct k_work *work)
 }
 K_WORK_DEFINE(start_adv_work, start_adv_work_handler); //this replaces static struct definition and init
 
+uint8_t getBLEMode()
+{
+	if(isReady){
+		return BLE_MODE_READY;
+	}
+	if(isAdvertising)
+	{
+		if(pairing_mode){
+			return BLE_MODE_OPEN_ADVERT;
+		} else{
+			return BLE_MODE_ADVERT;
+		}
+	} else {
+		return BLE_MODE_NONE;
+	}
+}
 
 static void stop_adv_work_handler(struct k_work *work)
 {
@@ -357,38 +380,21 @@ uint8_t get_bonded_devices(uint8_t *buf)
 }
 
 //we can't use delays in functions ghere because they are called by ISRs, so we use the cmdhandler mechanism to initiate the actions by message queue
+//orange button
 void btn1_extralongpress_action(struct k_timer *dummy)
 {
 	struct cmdHandler_type cmdHandler; 
 
-	//if button2 is also held down (after button1), then device will enter serial recovery when it comes out of reset
-	LOG_INF("Button1 extra long press: reset WL");
-	cmdHandler.len = 3;
-	cmdHandler.route = ROUTE_LOCAL;
-	cmdHandler.buf[0] = 0xFF;
-	cmdHandler.buf[1] = 0x23; //reset WL
-	cmdHandler.buf[2] = cmdHandler.len;
-	while(k_msgq_put(&cmd_req_msgq, &cmdHandler, K_NO_WAIT) != 0)
+	if(allowExtraLongPress1)
 	{
-		/* message queue is full: purge old data & try again */
-		LOG_INF("Purging CmdReq MsgQ");
-		k_msgq_purge(&cmd_req_msgq);
-	}
+		allowEnterLowPower = false; 
 
-}
-
-void btn2_extralongpress_action(struct k_timer *dummy)
-{
-	struct cmdHandler_type cmdHandler; 
-
-	//if button1 is also held down (after button2), then device will erase bonds 
-	if(button1_held)
-	{
-		LOG_INF("Button2 extra long press with Button1: delete bonds");
+		//if button2 is also held down (after button1), then device will enter serial recovery when it comes out of reset
+		LOG_INF("Button1 extra long press: reset WL");
 		cmdHandler.len = 3;
 		cmdHandler.route = ROUTE_LOCAL;
 		cmdHandler.buf[0] = 0xFF;
-		cmdHandler.buf[1] = 0x22; //delete bonds
+		cmdHandler.buf[1] = 0x23; //reset WL
 		cmdHandler.buf[2] = cmdHandler.len;
 		while(k_msgq_put(&cmd_req_msgq, &cmdHandler, K_NO_WAIT) != 0)
 		{
@@ -397,20 +403,49 @@ void btn2_extralongpress_action(struct k_timer *dummy)
 			k_msgq_purge(&cmd_req_msgq);
 		}
 	}
-	else
+
+}
+
+//blue button
+void btn2_extralongpress_action(struct k_timer *dummy)
+{
+	struct cmdHandler_type cmdHandler; 
+
+	if(allowExtraLongPress2)
 	{
-		LOG_INF("Button2 extra long press: enable pairing");
-	
-		cmdHandler.len = 3;
-		cmdHandler.route = ROUTE_LOCAL;
-		cmdHandler.buf[0] = 0xFF;
-		cmdHandler.buf[1] = 0x1F; //start open pairing mode
-		cmdHandler.buf[2] = cmdHandler.len;
-		while(k_msgq_put(&cmd_req_msgq, &cmdHandler, K_NO_WAIT) != 0)
+		allowEnterLowPower = false;
+
+		//if button1 is also held down (after button2), then device will erase bonds 
+		if(button1_held)
 		{
-			/* message queue is full: purge old data & try again */
-			LOG_INF("Purging CmdReq MsgQ");
-			k_msgq_purge(&cmd_req_msgq);
+			LOG_INF("Button2 extra long press with Button1: delete bonds");
+			cmdHandler.len = 3;
+			cmdHandler.route = ROUTE_LOCAL;
+			cmdHandler.buf[0] = 0xFF;
+			cmdHandler.buf[1] = 0x22; //delete bonds
+			cmdHandler.buf[2] = cmdHandler.len;
+			while(k_msgq_put(&cmd_req_msgq, &cmdHandler, K_NO_WAIT) != 0)
+			{
+				/* message queue is full: purge old data & try again */
+				LOG_INF("Purging CmdReq MsgQ");
+				k_msgq_purge(&cmd_req_msgq);
+			}
+		}
+		else
+		{
+			LOG_INF("Button2 extra long press: enable pairing");
+		
+			cmdHandler.len = 3;
+			cmdHandler.route = ROUTE_LOCAL;
+			cmdHandler.buf[0] = 0xFF;
+			cmdHandler.buf[1] = 0x1F; //start open pairing mode
+			cmdHandler.buf[2] = cmdHandler.len;
+			while(k_msgq_put(&cmd_req_msgq, &cmdHandler, K_NO_WAIT) != 0)
+			{
+				/* message queue is full: purge old data & try again */
+				LOG_INF("Purging CmdReq MsgQ");
+				k_msgq_purge(&cmd_req_msgq);
+			}
 		}
 	}
 }
@@ -918,6 +953,8 @@ void on_le_data_len_updated(struct bt_conn *conn, struct bt_conn_le_data_len_inf
     LOG_INF("Data length updated. Length %d/%d bytes, time %d/%d us", tx_len, rx_len, tx_time, rx_time);
 }
 
+
+
 BT_CONN_CB_DEFINE(conn_callbacks) = {
 	.connected    = on_connected,
 	.disconnected = on_disconnected,
@@ -929,15 +966,15 @@ BT_CONN_CB_DEFINE(conn_callbacks) = {
 	.le_data_len_updated = on_le_data_len_updated,
 };
 
-#ifdef CONFIG_BT_NUS_SECURITY_ENABLED
-static uint32_t pairing_passkey = 0;
 
+
+static uint32_t pairing_passkey = 0;
 uint32_t getpasskey(void)
 {
-	LOG_INF("Passkey in getter: %06u", pairing_passkey);
 	return pairing_passkey;
 }
 
+#ifdef CONFIG_BT_NUS_SECURITY_ENABLED
 static void auth_passkey_display(struct bt_conn *conn, unsigned int passkey)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
@@ -946,10 +983,10 @@ static void auth_passkey_display(struct bt_conn *conn, unsigned int passkey)
 
 	LOG_INF("Display Passkey %s: %06u", addr, passkey);
 	pairing_passkey = passkey;
-	#if WL_IN_CHARGER
-		displayPairingKey();
-	#endif
+	
+
 }
+
 
 
 static void auth_cancel(struct bt_conn *conn)
@@ -958,9 +995,9 @@ static void auth_cancel(struct bt_conn *conn)
 
 	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 
-	LOG_INF("Pairing cancelled: %s. Should DIsconnect here", addr);
+	LOG_INF("Pairing cancelled: %s. Should disconnect here", addr);
 
-	//JML TODO: disconnect here
+	pairing_passkey = 0;
 }
 
 
@@ -971,6 +1008,8 @@ static void pairing_complete(struct bt_conn *conn, bool bonded)
 	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 
 	LOG_INF("Pairing completed: %s, bonded: %d", addr, bonded);
+
+	pairing_passkey = 0;
 }
 
 
@@ -982,7 +1021,8 @@ static void pairing_failed(struct bt_conn *conn, enum bt_security_err reason)
 
 	LOG_INF("Pairing failed conn: %s, reason %d", addr, reason);
 
-	//JML TODO: disconnect here
+	
+	pairing_passkey = 0;
 }
 
 
@@ -1053,16 +1093,35 @@ void setLowPower(void)
 
 	setBuzzerPeriod(2273, 200);
 	setBuzzerPeriod(4546, 200);
-	setBuzzerPeriod(9092, 200);
-	while(dk_get_buttons()>0)
+	
+	while(dk_get_buttons() > 0)
 	{
 		LOG_INF("Button still held");
+		if(!allowEnterLowPower)
+		{
+			LOG_INF("Not Entering Low Power because there was an extralongpress detected");
+			return;
+		} 
 		k_msleep(100);
 	}
+	
+	k_msleep(100);
+	//JML Note: not sure this second check is needed
+	if(!allowEnterLowPower)
+	{
+		LOG_INF("Not Entering Low Power because there was an extralongpress detected when button released");
+		return;
+	} 
+	setBuzzerPeriod(9092, 200); //play last tone only if it actually goes to sleep
 
+	
 	LOG_INF("Entering Low Power");
 	k_msleep(100);
 	
+	#if WL_IN_CHARGER
+		enableDisplay(0);
+	#endif
+
 	powerDownRadio();
 	//power_down_sensor();
 	
@@ -1096,6 +1155,7 @@ void button_changed(uint32_t button_state, uint32_t has_changed)
 {
 	uint32_t buttonsOn = button_state & has_changed;
 	uint32_t buttonsOff = (~button_state) & has_changed;
+	uint32_t stat, stat_extra;
  	//LOG_INF("button_state : %08X", button_state);
 	//LOG_INF("has_changed  : %08X", has_changed);
 	//LOG_INF("buttonsON : %08X", buttonsOn);
@@ -1105,50 +1165,50 @@ void button_changed(uint32_t button_state, uint32_t has_changed)
 
 	cmdHandler.len = 0;
 
-	//JML: This allows a button press to authorize the pairing request. Currently not used
-	//instead the passkey is read via USB
-	// #ifdef CONFIG_BT_NUS_SECURITY_ENABLED
-	// if (auth_conn) {
-	// 	if (buttonsOn & KEY_PASSKEY_ACCEPT) {
-	// 		LOG_INF("Passkey accepted");
-	// 		num_comp_reply(true);
-	// 	}
-
-	// 	if (buttonsOn & KEY_PASSKEY_REJECT) {
-	// 		LOG_INF("Passkey rejected");
-	// 		num_comp_reply(false);
-	// 	}
-	// }
-	// #endif /* CONFIG_BT_NUS_SECURITY_ENABLED */
-
+	
+	
 	if (buttonsOn & DK_BTN1_MSK ){
 		k_timer_start(&btn1_timer, K_MSEC(LONG_BUTTON_PUSH), K_NO_WAIT);
 		k_timer_start(&btn1_timer_extra, K_MSEC(EXTRALONG_BUTTON_PUSH), K_NO_WAIT);
-		//longPress1Start = k_uptime_get_32();
-		//LOG_INF("Button1 press started %08X", longPress1Start);
+		LOG_INF("Button1 press started");
 		button1_held = true;
+		allowEnterLowPower = true;
+		if(allowExtraLongPress1)
+		{
+			allowExtraLongPress2 = false; //don't allow extra long press action on other button
+		}
 	}
 
 	if (buttonsOn & DK_BTN2_MSK ){
 		k_timer_start(&btn2_timer, K_MSEC(LONG_BUTTON_PUSH), K_NO_WAIT);
 		k_timer_start(&btn2_timer_extra, K_MSEC(EXTRALONG_BUTTON_PUSH), K_NO_WAIT);
-		//longPress2Start = k_uptime_get_32();
-		//LOG_INF("Button2 press started %08X", longPress2Start);
+		allowEnterLowPower = true;
+		LOG_INF("Button2 press started");
+		if(allowExtraLongPress2)
+		{
+			allowExtraLongPress1 = false; //don't allow extra long press action on other button
+		}
 	}
 
 
 	if (buttonsOff & DK_BTN1_MSK ){ 
-		
+		allowExtraLongPress2 = true; //re-allow extra long press action on other button
+
 		button1_held = false;
-		if(k_timer_status_get(&btn1_timer)==0)
+
+		stat =  k_timer_status_get(&btn1_timer);
+		stat_extra = k_timer_status_get(&btn1_timer_extra);
+		LOG_INF("Button1 release: timer %d, extratimer %d",stat,stat_extra);
+		k_timer_stop(&btn1_timer); //stop the timer to prevent long press action
+		k_timer_stop(&btn1_timer_extra); //stop the timer to prevent long press action
+		if(stat==0 && stat_extra==0)
 		{
 			//long press timer has not elapsed
-			k_timer_stop(&btn1_timer); //stop the timer to prevent long press action
-			k_timer_stop(&btn1_timer_extra); //stop the timer to prevent long press action
+
 			LOG_INF("Button1 short press release");
 		
 			if(action[BUTTON_1_SHORT].len > 0){
-				LOG_INF("Button1 short sction started");
+				LOG_INF("Button1 short action started");
 				cmdHandler.len = action[BUTTON_1_SHORT].len;
 				memcpy(cmdHandler.buf, action[BUTTON_1_SHORT].buf, action[BUTTON_1_SHORT].len);
 			} else {
@@ -1159,16 +1219,20 @@ void button_changed(uint32_t button_state, uint32_t has_changed)
 
 	
 	if (buttonsOff & DK_BTN2_MSK ){
-		
-		if(k_timer_status_get(&btn2_timer)==0)
+		allowExtraLongPress1 = true; //re-allow extra long press action on other button
+
+		stat =  k_timer_status_get(&btn2_timer);
+		stat_extra = k_timer_status_get(&btn2_timer_extra);
+		LOG_INF("Button2 release: timer %d, extratimer %d", stat, stat_extra);
+		k_timer_stop(&btn2_timer);
+		k_timer_stop(&btn2_timer_extra);
+		if(stat==0 && stat_extra==0)
 		{
 			//long press timer has not elapsed
-			k_timer_stop(&btn2_timer);
-			k_timer_stop(&btn2_timer_extra);
 			LOG_INF("Button2 short press release");
 		
 			if(action[BUTTON_2_SHORT].len > 0){
-				LOG_INF("Button2 short sction started");
+				LOG_INF("Button2 short action started");
 				cmdHandler.len = action[BUTTON_2_SHORT].len;
 				memcpy(cmdHandler.buf, action[BUTTON_2_SHORT].buf, action[BUTTON_2_SHORT].len);
 			} else {
@@ -1369,13 +1433,13 @@ int main(void)
 		err = bt_conn_auth_cb_register(&conn_auth_callbacks);
 		if (err) {
 			LOG_WRN("Failed to register authorization callbacks.\n");
-			return;
+			return 0;
 		}
 		
 		err = bt_conn_auth_info_cb_register(&conn_auth_info_callbacks);
 		if (err) {
 			LOG_WRN("Failed to register authorization info callbacks.\n");
-			return;
+			return 0;
 		}
 		LOG_INF("Bluetooth Authorization Callbacks registered");
 	}
@@ -1407,7 +1471,7 @@ int main(void)
 	err = bt_nus_init(&nus_cb);
 	if (err) {
 		LOG_ERR("Failed to initialize Nordic UART service (err: %d)", err);
-		return;
+		return 0;
 	}
 
 	k_sem_give(&ble_init_ok);
@@ -1477,18 +1541,91 @@ int main(void)
 	//Just blink LED infinitely, everything else happens in separate threads
 	//uint8_t cnt = 0;
 	for (;;) {
-		if(modeLED & BLUE_LED_BLE_ADV && (isAdvertising ||  isReady )) {dk_set_led_on(BLUE_LED);}
+
+		if(pairing_passkey != 0)
+		{
+			LOG_INF("Do Display Pairing Function");
+			uiPairingPasskey();
+			
+		} 
+
+		if(modeLED & BLUE_LED_BLE_ADV && (getBLEMode())) {dk_set_led_on(BLUE_LED);}
 		k_sleep(K_MSEC(100));
-		if(!isReady ){
+		if(getBLEMode() != BLE_MODE_READY ){
 			if(modeLED & BLUE_LED_BLE_ADV){dk_set_led_off(BLUE_LED);}
 			
-			if(isAdvertising && pairing_mode){k_sleep(K_MSEC(100));}  //fast blink in pairing mode
+			if(getBLEMode() == BLE_MODE_OPEN_ADVERT){k_sleep(K_MSEC(100));}  //fast blink in pairing mode
 			else {k_sleep(K_MSEC(900));}  //slow blink otherwise
 		} 
 	}
 }
+void uiEraseBonds(void)
+{
+	#if WL_IN_CHARGER
+		setChargeMode(CHARGER_MODE_DISPLAY_ERASEBONDS);
+	#else
+		for(int i = 0; i<4; i++)
+		{
+			setLEDs(0,1,0);
+			k_msleep(100);
+			setLEDs(1,0,0);
+			k_msleep(100);
+		}
+	#endif
+}
+
+void uiPairingPasskey(void)
+{
+
+	LOG_INF( "Start Display Pairing Function");
+	#if WL_IN_CHARGER
+		setChargeMode(CHARGER_MODE_DISPLAY_PASSKEY);
+	#else 
+		//if there is no screen, use the LEDs to display pairing key R,G,B,R,G,B
+		//we only have 30s to display the pairing code and have user enter number
+		//worst case code is 9,9,9,9,9,9.  If they have at least 10s to enter code, blinking digit must be <20/54s (370ms)
+		//Note that code 0,0,0,0,0,0 is not supported
+
+		uint32_t key = pairing_passkey;
+		uint8_t digits[6]; // = {1, 2, 3, 4 ,5, 6};
+		int i, j;
+		//convert 6 digit number to 6 individual digits in array
+		for (i = 5; i >= 0; i--) {
+			digits[i] = key % 10; // Get last digit
+			key /= 10;            // Remove last digit
+		}
+
+		for (j = 0; j < 6; j++)
+		{
+			for (i = 0; i < digits[j]; i++)
+			{
+				if(j==0 || j==3){
+					setLEDs(1,0,0);
+				} else if(j==1 || j==4){
+					setLEDs(0,1,0);
+				} else {
+					setLEDs(0,0,1);
+				}
+
+				k_msleep(50);
+				setLEDs(0,0,0);
+				if( pairing_passkey == 0 ) 
+				{
+					break;
+				}
+				k_msleep(450);		
+			}	
+			if( pairing_passkey == 0 )
+			{
+				break;
+			}	
+			k_msleep(1000);
+		}
+	#endif
 
 
+
+}
 
 void implant_reqresp_thread(void)
 {

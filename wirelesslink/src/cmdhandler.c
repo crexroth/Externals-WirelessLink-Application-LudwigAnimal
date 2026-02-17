@@ -1270,7 +1270,7 @@ void command_handler_thread(void)
             response[INDEX_RESP_TYPE] = response_type;
             response[INDEX_RESP_LEN] = response_len;
 
-            LOG_HEXDUMP_INF(response, response_len, "Response to Host:");
+            LOG_HEXDUMP_INF(response, response_len, "CmdResponse:");
 
             switch(route)
             {
@@ -1282,6 +1282,10 @@ void command_handler_thread(void)
                     ble_send(response, response_len);
                     break;
                 
+                case ROUTE_LOCAL:
+                    LOG_INF("command response handled locally");
+                    break;
+
                 default:
                     LOG_INF("command response route %d not yet implemented", cmdhandler.route);
                 
@@ -1585,6 +1589,8 @@ uint8_t pmfile_read_supervisor(uint8_t * pmfile, uint8_t * resp, uint8_t resp_le
 K_THREAD_DEFINE(command_handler_thread_id, CMD_STACKSIZE, command_handler_thread, NULL, NULL, NULL, CMD_PRIORITY, 0, 0);
 
 void resetWL(void){
+    LOG_INF("Resetting");
+    k_msleep(500); //allow logs to complete
     NVIC_SystemReset();
 
     // // errata - Tested this workaround. Be aware of the register address:
