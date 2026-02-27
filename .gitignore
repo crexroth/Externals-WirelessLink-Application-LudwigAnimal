@@ -1,2 +1,4 @@
 /wirelesslink/build/*
 !/wirelesslink/build/dfu_application.zip
+/.vscode/
+/wirelesslink/.vscode/
