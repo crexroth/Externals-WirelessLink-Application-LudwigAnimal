@@ -1,44 +1,89 @@
 # Externals-WirelessLink-Application Read Me
-This is the application code (firmware) for the WireLess Link which serves as the radio interface to the implant with multiple external interfacing options.  The Wireless Link is also used in the SmartCharger.  The code can be built with or without charger functionality.  The Wireless Link is based on the nRF4340+nRF7002 companion module (Fanstel WT40 BLE+WiFi module) and the CC1101 (Anaren A1101 433MHz module). The Nordic nRF5340 is a capable microcontroller with many peripherals
+This repository is home to the firmware application source code of the WL - Wireless Link in the COSMIIC System. Full documentation is available at **[docs.cosmiic.org/Externals/Wireless-Link](https://docs.cosmiic.org/Externals/Wireless-Link)**
+
+## Licensing
+Firmware and software files are licensed to open source users by COSMIIC under the MIT License. Refer to the **[license text](https://mit-license.org/)** to understand your permissions.
+
+All files of this category are hosted across COSMIIC GitHub repositories. This includes, but is not limited to...
+
+- Firmware
+    - Module source code (bootloaders and applications)
+    - External wireless components source code (bootloaders and applications)
+- Software
+    - API in Matlab
+    - Assorted Matlab apps
+    - Tools and processes, such as custom linters and GitHub Action workflow files
+
+---
+
+## Component Overview
+ The Wireless Link serves as the radio interface to the implant with multiple external interfacing options. The Wireless Link is also used in the SmartCharger. The code can be built with or without charger functionality. The Wireless Link is based on the nRF4340+nRF7002 companion module (Fanstel WT40 BLE+WiFi module) and the CC1101 (Anaren A1101 433MHz module). The Nordic nRF5340 is a capable microcontroller with many peripherals
+
+---
+
+## Technical Overview
+This code is based on:
+* BLE Peripheral with Nordic UART Serivce and USB ASM CDC: peripheral_uart sample (nrf/samples/bluetooth)
+* SDCard: fatfs_fstab sample (zephyr\samples\subsys\fs)
+* DFU over USB: **https://academy.nordicsemi.com/courses/nrf-connect-sdk-intermediate/lessons/lesson-9-bootloaders-and-dfu-fota/**
+
+---
 
 ## Development Environment
-For instructions on installing VS Code and nRF Connect SDK see:
-https://academy.nordicsemi.com/courses/nrf-connect-sdk-fundamentals/ 
+For instructions on installing VS Code and nRF Connect SDK see: **https://academy.nordicsemi.com/courses/nrf-connect-sdk-fundamentals/**
 
 * nRF Connect for VS Code Extension Pack
 * Toolchanin/SDK v3.1.1
 * VS Code  v1.105.1 
 
-## Overview
-This code is based on:
-* BLE Peripheral with Nordic UART Serivce and USB ASM CDC: peripheral_uart sample (nrf/samples/bluetooth)
-* SDCard: fatfs_fstab sample (zephyr\samples\subsys\fs)
-* DFU over USB: https://academy.nordicsemi.com/courses/nrf-connect-sdk-intermediate/lessons/lesson-9-bootloaders-and-dfu-fota/
-
-## Open Application
-From the nRF Connect extension, choose "Open an exiting application" and select the "wirelesslink" folder
+### Open Application
+Use the `Externals-WirelessLink-Application/wirelesslink` directory as the project folder in VS Code. Open the nRF Connect extension in the sidebar. Under the Welcome dropdown, click "Open an existing application" and select the "wirelesslink" folder in the file explorer.
 ![open app](./doc/OpenApplication.jpg)
 
-## Build Configuration
-Set the board to cosmiic_wireless_link_nrf5340_cpuapp and eneable debug options
+### Build Configuration
+Under the Applications dropdown, set the board to `cosmiic_wireless_link_nrf5340_cpuapp` and enable debug options
 ![build config](./doc/BuildConfig.jpg)
 
-If the custom boards option does not appear add the "boards" folder to BOARRD_ROOT, by going to File>Preferences>Settings.  Choose nRF Connect and add path "boards" folder.
+If the custom boards option does not appear, add your `boards` folder to BOARD_ROOT, by going to File -> Preferences -> Settings.  Search for "nRF-Connect: Board Roots" and add path to `C:\Users\username\Documents\GitHub\Externals-WirelessLink-Application\wirelesslink\boards` folder.
 ![board root](./doc/BoardRoot.JPG)
 
-Generate and Build
+---
 
 ## Flashing and Debugging
-### Hardware Requirments
-Without a debugger, the app code can still be updated.  See **Serial Recovery - USB DFU** below.
 
+### Hardware Requirements
 The Wireless Link (standalone) is intended to operate at 1.8V unless the 1V8_EN solder bridge trace is cut.  If operating at 1.8V, use the nRF7002DK (PCA10143) to Flash and Debug because it also uses 1.8V.
 ![nRF7002DK-wirelesslink](./doc/nRF7002DK-wirelesslink.JPG)
 
 The WirelessLink in the SmartCharger operates at 3.3V and must have the 1V8_EN solder bridge trace cut.  Use the nRF5340DK (PCA10095) to Flash and Debug.  (It uses 3.0V)
-![nRF7002DK-wirelesslink](./doc/nRF5340DK-smartcharger.JPG)
+![nRF5340DK-smartcharger](./doc/nRF5340DK-smartcharger.JPG)
 
 You will also need a custom cable to connect the Wireless Link JTAG lines (GND, VCC, RESET, SWCLK, SWDIO) to the DK
+
+### Serial Recovery and Device Firmware Update Mode (USB DFU Mode)
+New firmware can be uploaded to the Wireless Link without using the JTAG link. To load new firmware onto the Wireless Link / Smart Charger using the DFU Mode:
+* Download AuTerm (https://github.com/thedjnK/AuTerm/releases), Version 0.36.
+* Enter DFU mode by holding SW2 (button1, on the right) while plugging in the board. The Green LED should turn on and stay solid.
+* Open AuTerm and set the Serial Port in the “Config” tab to point to your Wireless Link
+
+![configuration menu on AuTerm](./wirelesslink/doc/AuTerm-Config.png)
+
+* In the “MCUmgr” tab, press "Connect" and set the “File” to point to your built application. This can be either `wirelesslink.signed.bin` (unzipped from `build/dfu_application.zip`) folder or `build/wirelesslink/zephyr/zephyr.signed.bin`
+
+![MCU manager menu on AuTerm](./wirelesslink/doc/AuTerm-MCUmgr.png)
+
+* Set “No Action”, and hit Go
+
+* Power cycle the Smart Charger and note that the version number is the expected version number on the Home Screen
+
+NOTE: 
+
+:::warning NOTE
+
+- Unclear if both the net core and app core can be updated. Seems to only update the app core.
+- See **https://academy.nordicsemi.com/courses/nrf-connect-sdk-intermediate/lessons/lesson-9-bootloaders-and-dfu-fota/** for more information on this process
+
+:::
 
 ### Debugging
 Debug messages can be viewed in JLink RTT Viewer. 
@@ -46,7 +91,7 @@ Debug messages can be viewed in JLink RTT Viewer.
 
 ## Pin definitions
 
-***Used in SmartCharger***
+***Indicates use in Smart Charger***
 All GPIO can be used as I2C, UART, SPI, or PWM 
 Primary function is as currently configured in board files.  Overlays can be used to provide alternate functions
 
@@ -125,13 +170,7 @@ Primary function is as currently configured in board files.  Overlays can be use
 * Analog Input
     * AIN6 (P0.27) measures VBATT*0.354, used to monitor battery voltage. 
     * If the smart coil is not used, AIN0/AIN1 are available
-
-
-## Serial Recovery - USB DFU Mode
-New firmware can be uploaded to the Wireless Link without using the JTAG link 
-* Press SW2 (button1) on Anaren side while resetting module.  Green LED should turn on solid
-* Use AuTerm to load wirelesslink.signed.bin (in build/dfu_application.zip or build/wirelesslink/zephyr/zephyr.signed.bin) over USB (See https://academy.nordicsemi.com/courses/nrf-connect-sdk-intermediate/lessons/lesson-9-bootloaders-and-dfu-fota/)
-* NOTE: Unclear if both the net core and app core can be updated.  
+ 
 
 ## Button Functions
 * Buttons can be programmed to perfrom any API function, short press, long press
@@ -141,32 +180,40 @@ New firmware can be uploaded to the Wireless Link without using the JTAG link
 * SW2 (SC:blue, WL:Anaren side) extra long press (10s) starts BLE pairing mode.  If SW1 is held down afetr SW2 (and is still held), device will delete existing bonds 
 * Note that the shortpress action occurs on button release whereas longpress actions occur once the button has been held for long enough (2s) and do not require releasing the button. Therefore SW1 and SW2 longpress actions will occur prior to the extralongpress actions
 
-## LEDs - Wireless Link Mode
+## LED Indicators
+
+### LEDs - Wireless Link Mode
 * Blue LED blinking - indicates BLE advertising
 * Ble LED solid - BLE connected
 * Green LED solid - Serial recovery mode
 * Green blink - MedRadio Response received
 * Red blink - MedRadio Response timeout or bad packet
 
-## LEDs - Charger Mode
+### LEDs - Charger Mode
 * Red LED - Error
 * Green LED blinking - Charging Implant
 * Green LED solid - Implant fully charged
 * Yellow LED - Warning
 
+---
+
 ## User Storage (NVS)
 * Button actions, MedRadio settings, and Charger settings are stored in user_storage partition
+
+---
 
 ## Storage (NVS)
 * BLE bonding data is stored in storage partition
 
+---
+
 ## BLE Pairing/Bonding
 * If security is enabled, the WirelessLink requires a passkey to pair/bond.  The passkey can be optained through the API (requires USB or UART connection).  If bonds are deleted on the Wireless Link, make sure to delete any bonding information on the host device as well.
 
+---
 
-
-# API
-## Packet format
+## API
+### Packet format
 The packet format is the same whether or not the packet is sent via BLE, USB, or UART
 
 |header| |                                             |payload|
@@ -175,14 +222,7 @@ The packet format is the same whether or not the packet is sent via BLE, USB, or
 |0xFF    | seebelow|  lengthOfPacket (up to 255)|    up to 252 bytes|
 multiple bytes are presented Little Endian
 
-## Commands
-## Packet format
-header                                         payload
-SYNC   CMD     LEN                              ...
-0xFF seebelow  lengthOfPacket(up to 255)    up to 252 bytes
-multiple bytes are presented Little Endian
-
-
+### Commands
 
 | NAME | CMD    |  bytesToWL | bytesFromWL  |Description|
 |---|---|---|---|---|  
@@ -284,7 +324,7 @@ multiple bytes are presented Little Endian
 |CHG_GET_CHARGEMODE          |0xA0|    0    |   1         | |
 |CHG_SET_CHARGEMODE          |0xA1|    1    |   0         | |
 
-# Future updates:
+## Future updates:
 * Some of the GPIO is defined in wlgpio.c/h and the generic GPIO API is used.  These GPIO definitions may be moved to the devicetree
 * The sensor thread and ISM330IS is not currently enabled.  The sensor API could be used with a driver implemented for ISM330IS.  However, the sensor API does not directly supprt some of the advanced functions (ISPU, quaternion output).  We will likely implement I2C generic code without a driver
 * The CC1101 is implemented without a driver
