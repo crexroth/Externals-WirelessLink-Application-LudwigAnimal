@@ -1821,9 +1821,9 @@ void setChargerParams(uint8_t* params)
 #define COIL_MAX_TEMP	440
 
 #define PM_OPEN_TEMP	100
-#define PM_GOOD_TEMP	370
-#define PM_WARN_TEMP    380
-#define PM_MAX_TEMP		400
+#define PM_GOOD_TEMP	400
+#define PM_WARN_TEMP    410
+#define PM_MAX_TEMP		430
 
 #define MAX_ERR_SYS		5 //maximium number of errors trying to read sys power levels before error
 #define MAX_ERR_CD		5 //maximium number of errors trying to read CD power levels before error
